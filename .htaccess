@@ -1,0 +1,16 @@
+# config.phpへの直接アクセスを禁止
+<FilesMatch "^config\.php$">
+    Require all denied
+</FilesMatch>
+
+# ディレクトリ一覧を禁止
+Options -Indexes
+
+# php74 → php82 に変更
+AddHandler application/x-httpd-ea-php82 .php .php7 .phtml
+
+# PHP設定
+php_value upload_max_filesize 10M
+php_value post_max_size 12M
+php_value max_execution_time 300
+php_value max_input_time 300

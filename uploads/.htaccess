@@ -1,0 +1,7 @@
+# 画像のみ許可、PHPの実行を禁止
+<FilesMatch "\.ph(p|tml)$">
+    Require all denied
+</FilesMatch>
+
+# ディレクトリ一覧を禁止
+Options -Indexes
