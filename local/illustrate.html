@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Illustrate — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.chk-list { display:flex; flex-wrap:wrap; gap:0.4rem; }
+.chk { font-size:0.78rem; padding:0.35rem 0.7rem; border:1px solid rgba(124,92,255,0.22); border-radius:20px; cursor:pointer; }
+.chk input { display:none; }
+.chk.on { background:rgba(124,92,255,0.15); border-color:var(--orchid); color:var(--orchid); }
+.illust-result { white-space:pre-wrap; font-family:monospace; font-size:0.82rem; line-height:1.7; color:var(--pearl); }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ai.js"></script>
+<script>
+const ICON = '🎨';
+const app = document.getElementById('app');
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  let prefill = '';
+  if (mode === 'novel' && id) { const n = await DB.get('novels', Number(id)); prefill = (n?.body||'').replace(/\{\{img:\d+\}\}/g,'').trim(); }
+  renderForm(prefill);
+}
+
+async function renderForm(prefill) {
+  document.getElementById('header').innerHTML = DS.pageHeader(history.length>1 ? 'javascript:history.back()' : 'forge.html', '戻る', ICON);
+  const [residents, ready] = await Promise.all([Store.byName(await DB.all('residents')), Store.providersReady()]);
+  if (!ready.length) { app.innerHTML = `<h1 class="page-title">挿絵プロンプト</h1><div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
+  app.innerHTML = `
+    <h1 class="page-title">挿絵プロンプト</h1><p class="page-subtitle">Illustrate</p>
+    <form id="f" class="mt-3">
+      <div class="form-group"><label class="form-label">AIプロバイダー</label><select class="form-select" id="provider">${ready.map(p=>`<option value="${p.id}">${DS.esc(p.displayName||p.name)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">シーン本文</label><textarea class="form-textarea" id="scene" style="min-height:140px;" placeholder="画像にしたいシーンの文章">${DS.esc(prefill||'')}</textarea></div>
+      ${residents.length?`<div class="form-group"><label class="form-label">登場キャラ（外見を反映）</label><div class="chk-list" id="chars">${residents.map(r=>`<label class="chk"><input type="checkbox" value="${r.id}">${DS.esc(r.name)}</label>`).join('')}</div></div>`:''}
+      <div class="form-group"><label class="form-label">追加指示（任意）</label><input class="form-input" id="extra" placeholder="例: anime style, soft lighting"></div>
+      <button type="submit" class="btn btn-primary btn-block" id="genBtn">🎨 プロンプト生成</button>
+    </form>
+    <div id="out"></div>`;
+  app.querySelectorAll('.chk input').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.chk').classList.toggle('on',cb.checked)));
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const scene = document.getElementById('scene').value.trim();
+    if (!scene) { DS.toast('シーン本文を入れてください', 'error'); return; }
+    const btn = document.getElementById('genBtn'); btn.disabled = true; btn.textContent = '生成中… 🎨';
+    const provider = ready.find(p=>p.id===Number(document.getElementById('provider').value));
+    const charIds = [...app.querySelectorAll('#chars input:checked')].map(c=>Number(c.value));
+    const chars = [];
+    for (const cid of charIds) { const c = await DB.get('residents', cid); if (c) chars.push(c); }
+    const { sys, user } = buildIllustPrompt(scene, chars, document.getElementById('extra').value.trim());
+    const res = await AI.call(provider, sys, user);
+    btn.disabled = false; btn.textContent = '🎨 プロンプト生成';
+    if (res.error) { DS.toast(res.error, 'error'); return; }
+    await DB.add('forgeGenerations', { provider: res.provider, model: res.model, promptSystem: sys, promptUser: user, output: res.text, inputTokens: res.inputTokens, outputTokens: res.outputTokens, cachedTokens: res.cachedTokens, costInput: res.costInput, costOutput: res.costOutput, costTotal: res.costTotal });
+    document.getElementById('out').innerHTML = `
+      <div class="detail-heading" style="font-family:'M PLUS Rounded 1c',sans-serif;font-weight:700;color:var(--pearl);margin:1.2rem 0 0.5rem;">結果</div>
+      <div class="card"><div class="illust-result" id="resultText">${DS.esc(res.text)}</div></div>
+      <button class="btn btn-sm" id="copyBtn">📋 コピー</button>`;
+    document.getElementById('copyBtn').addEventListener('click', () => { navigator.clipboard?.writeText(res.text); DS.toast('コピーしました'); });
+    document.getElementById('out').scrollIntoView({ behavior: 'smooth' });
+  });
+}
+
+function buildCharDescription(c) {
+  let d = '';
+  const map = { gender:'性別', hairstyle:'髪型', eyeColor:'目の色', clothing:'服装', bodyType:'体型', height:'身長', style:'系統', features:'特徴' };
+  for (const k in map) if (c[k]) d += `${map[k]}: ${c[k]}\n`;
+  return d;
+}
+function buildIllustPrompt(sceneText, characters, extra) {
+  let sys = `あなたは画像生成AI向けのプロンプト作成の専門家です。
+与えられた小説のシーンを、画像生成AI（Stable Diffusion, Midjourney, DALL-E等）で使えるプロンプトに変換してください。
+
+## 出力ルール
+- 英語で出力すること
+- 以下の順番で構成すること:
+  1. シーンの主要な描写（人物のポーズ、表情、アクション）
+  2. 人物の外見描写（髪型、目の色、服装、体型）
+  3. 背景・環境描写
+  4. 雰囲気・照明・色調
+  5. アートスタイル指定
+- 1つのプロンプトとして、カンマ区切りで出力
+- ネガティブプロンプトも別途出力
+- 日本語の補足説明を最後に簡潔に付ける
+
+## 出力フォーマット
+PROMPT:
+(ここにプロンプト)
+
+NEGATIVE:
+(ここにネガティブプロンプト)
+
+補足:
+(シーンの簡潔な日本語説明)`;
+  if (characters.length) {
+    const hasAnyPrompt = characters.some(c => c.illustPrompt);
+    if (hasAnyPrompt) {
+      sys += '\n\n## 登場キャラクター（画像生成用プロンプト）\n以下は各キャラの外見を画像生成AI向けに記述したものです。シーンプロンプトに統合してください。\n\n';
+      for (const c of characters) sys += `### ${c.name}\n${c.illustPrompt ? c.illustPrompt : buildCharDescription(c)}\n\n`;
+    } else {
+      sys += '\n\n## 登場キャラクター情報\n';
+      for (const c of characters) sys += `### ${c.name}\n${buildCharDescription(c)}\n\n`;
+    }
+  }
+  let user = '以下のシーンを画像生成AI向けプロンプトに変換してください:\n\n' + sceneText;
+  if (extra) user += '\n\n## 追加指示:\n' + extra;
+  return { sys, user };
+}
+
+window.addEventListener('hashchange', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>

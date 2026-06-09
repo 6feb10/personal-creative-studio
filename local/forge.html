@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Forge — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.forge-menu-item { display:flex; align-items:center; gap:0.8rem; }
+.mat-heading { font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; font-size:0.85rem; color:var(--orchid); margin:1.2rem 0 0.5rem; }
+.chk-list { display:flex; flex-wrap:wrap; gap:0.4rem; }
+.chk { font-size:0.78rem; padding:0.35rem 0.7rem; border:1px solid rgba(124,92,255,0.22); border-radius:20px; cursor:pointer; }
+.chk input { display:none; }
+.chk.on { background:rgba(124,92,255,0.15); border-color:var(--orchid); color:var(--orchid); }
+.gen-stats { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; margin:1rem 0; }
+.gen-stat { background:rgba(255,255,255,0.5); border:1px solid rgba(124,92,255,0.1); border-radius:8px; padding:0.6rem; text-align:center; }
+.gen-stat-val { font-size:1rem; color:var(--honey); font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; }
+.gen-stat-label { font-size:0.6rem; color:rgba(124,92,255,0.5); letter-spacing:0.05em; margin-top:0.2rem; }
+.gen-output { white-space:pre-wrap; line-height:2; color:var(--pearl); }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ai.js"></script>
+<script>
+const ICON = '✨';
+const app = document.getElementById('app');
+let _lastGenId = null;
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  if (mode === 'generate') return renderGenerate();
+  if (mode === 'result') return renderResult(id);
+  if (mode === 'templates') return renderTemplates();
+  if (mode === 'usage') return renderUsage();
+  return renderMenu();
+}
+
+async function renderMenu() {
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  const ready = await Store.providersReady();
+  app.innerHTML = `
+    <h1 class="page-title">AI生成</h1><p class="page-subtitle">Forge</p>
+    ${!ready.length ? `<div class="card"><div class="card-excerpt">⚠ AIキーが未設定です。生成・対話・挿絵を使うには、設定でAPIキーを追加してください。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>` : ''}
+    <div class="card"><a href="#generate" class="forge-menu-item"><span style="font-size:1.4rem;">✍️</span><div><div class="card-title" style="margin:0;">物語を生成</div><div class="card-meta" style="margin:0;">設定を組み合わせてAIに書かせる</div></div></a></div>
+    <div class="card"><a href="chat.html" class="forge-menu-item"><span style="font-size:1.4rem;">💬</span><div><div class="card-title" style="margin:0;">キャラと対話</div><div class="card-meta" style="margin:0;">キャラクターになりきって会話</div></div></a></div>
+    <div class="card"><a href="illustrate.html" class="forge-menu-item"><span style="font-size:1.4rem;">🎨</span><div><div class="card-title" style="margin:0;">挿絵プロンプト</div><div class="card-meta" style="margin:0;">シーンを画像生成AI向けに変換</div></div></a></div>
+    <div class="card"><a href="#templates" class="forge-menu-item"><span style="font-size:1.4rem;">📋</span><div><div class="card-title" style="margin:0;">テンプレート</div><div class="card-meta" style="margin:0;">生成スタイルのプリセット</div></div></a></div>
+    <div class="card"><a href="#usage" class="forge-menu-item"><span style="font-size:1.4rem;">📊</span><div><div class="card-title" style="margin:0;">使用量</div><div class="card-meta" style="margin:0;">トークン・コスト</div></div></a></div>`;
+}
+
+async function renderGenerate() {
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  const ready = await Store.providersReady();
+  if (!ready.length) { app.innerHTML = `<div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
+  const [projects, bases, residents, templates, novels] = await Promise.all([
+    Store.byName(await DB.all('projects')), Store.byName(await DB.all('bases')),
+    Store.byName(await DB.all('residents')), await DB.all('forgeTemplates'), Store.byUpdatedDesc(await DB.all('novels')),
+  ]);
+  app.innerHTML = `
+    <h1 class="page-title">物語を生成</h1>
+    <form id="f" class="mt-3">
+      <div class="form-group"><label class="form-label">AIプロバイダー</label><select class="form-select" id="provider">
+        ${ready.map(p=>`<option value="${p.id}">${DS.esc(p.displayName||p.name)} (${DS.esc(p.model)})</option>`).join('')}</select></div>
+      ${projects.length?`<div class="form-group"><label class="form-label">プロジェクト</label><select class="form-select" id="project"><option value="">— なし —</option>${projects.map(p=>`<option value="${p.id}">${DS.esc(p.name)}</option>`).join('')}</select></div>`:''}
+      ${bases.length?`<div class="mat-heading">拠点</div><div class="chk-list" id="bases">${bases.map(b=>`<label class="chk"><input type="checkbox" value="${b.id}">${DS.esc(b.name)}</label>`).join('')}</div>`:''}
+      ${residents.length?`<div class="mat-heading">キャラクター</div><div class="chk-list" id="residents">${residents.map(r=>`<label class="chk"><input type="checkbox" value="${r.id}">${DS.esc(r.name)}</label>`).join('')}</div>`:''}
+      ${templates.length?`<div class="mat-heading">テンプレート</div><div class="chk-list" id="templates">${templates.map(t=>`<label class="chk"><input type="checkbox" value="${t.id}">${DS.esc(t.name)}</label>`).join('')}</div>`:''}
+      ${novels.length?`<div class="form-group mt-3"><label class="form-label">続きを書く（既存ノベル）</label><select class="form-select" id="contNovel"><option value="">— なし（新規）—</option>${novels.map(n=>`<option value="${n.id}">${DS.esc(n.title||'無題')}</option>`).join('')}</select></div>`:''}
+      <div class="form-group"><label class="form-label">指示・お題</label><textarea class="form-textarea" id="prompt" style="min-height:100px;" placeholder="例: 二人が初めて出会う場面を書いて"></textarea></div>
+      <button type="submit" class="btn btn-primary btn-block" id="genBtn">✨ 生成する</button>
+    </form>
+    <div id="out"></div>`;
+  app.querySelectorAll('.chk input').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.chk').classList.toggle('on',cb.checked)));
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('genBtn'); btn.disabled = true; btn.textContent = '生成中… ✨';
+    const providerId = Number(document.getElementById('provider').value);
+    const projectId = Number(document.getElementById('project')?.value) || null;
+    const baseIds = [...app.querySelectorAll('#bases input:checked')].map(c=>Number(c.value));
+    const residentIds = [...app.querySelectorAll('#residents input:checked')].map(c=>Number(c.value));
+    const templateIds = [...app.querySelectorAll('#templates input:checked')].map(c=>Number(c.value));
+    const contNovelId = Number(document.getElementById('contNovel')?.value) || null;
+    let prevContent = '', contMode = '';
+    if (contNovelId) { const n = await DB.get('novels', contNovelId); prevContent = (n?.body||'').replace(/\{\{img:\d+\}\}/g,''); contMode = 'full'; }
+    const sys = await buildSystem({ projectId, baseIds, residentIds, templateIds, prevContent, contMode });
+    const user = document.getElementById('prompt').value.trim() || (prevContent ? 'この続きを書いてください。' : '上記の設定に基づいて、印象的なシーンを書いてください。');
+    const provider = ready.find(p=>p.id===providerId);
+    const res = await AI.call(provider, sys, user);
+    btn.disabled = false; btn.textContent = '✨ 生成する';
+    if (res.error) { DS.toast(res.error, 'error'); return; }
+    const genId = await DB.add('forgeGenerations', { provider: res.provider, model: res.model, promptSystem: sys, promptUser: user, output: res.text, inputTokens: res.inputTokens, outputTokens: res.outputTokens, cachedTokens: res.cachedTokens, costInput: res.costInput, costOutput: res.costOutput, costTotal: res.costTotal, savedToNovelId: contNovelId || null });
+    location.hash = 'result/' + genId;
+  });
+}
+
+async function buildSystem({ projectId, baseIds, residentIds, templateIds, prevContent, contMode }) {
+  const parts = ['あなたは優れた小説家です。日本語で、指示された設定・条件に基づいて創作してください。\n'];
+  if (projectId) { const p = await DB.get('projects', projectId); if (p) { parts.push(`## プロジェクト: ${p.name}`); if (p.customInstructions) parts.push(`### カスタム指示\n${p.customInstructions}`); if (p.knowledge) parts.push(`### ナレッジ\n${p.knowledge}`); } }
+  const allRes = await DB.all('residents');
+  for (const bid of baseIds) { const b = await DB.get('bases', bid); if (b) { parts.push(`## 拠点: ${b.name}\n${b.description||''}`); const m = allRes.filter(r=>r.baseId===bid).map(r=>r.name); if (m.length) parts.push('所属キャラ: ' + m.join('、')); } }
+  for (const rid of residentIds) {
+    const r = await DB.get('residents', rid); if (!r) continue;
+    let info = `## キャラ: ${r.name}\n`;
+    const map = { gender:'性別', height:'身長', bodyType:'体型', hairstyle:'髪型', eyeColor:'目の色', clothing:'服装', style:'系統', features:'特徴', personality:'性格', physicalInfo:'身体情報' };
+    for (const k in map) if (r[k]) info += `${map[k]}: ${r[k]}\n`;
+    if (r.baseId) { const bn = (await DB.get('bases', r.baseId))?.name; if (bn) info += `所属: ${bn}\n`; }
+    if ((r.params||[]).length) info += 'パラメーター: ' + r.params.map(p=>`${p.name}: ${p.value}/10`).join('、') + '\n';
+    for (const cf of (r.customFields||[])) if (cf.name && cf.value) info += `${cf.name}: ${cf.value}\n`;
+    parts.push(info);
+  }
+  for (const tid of templateIds) { const t = await DB.get('forgeTemplates', tid); if (t) parts.push(`## 指示: ${t.name}\n${t.content}`); }
+  if (prevContent) parts.push(contMode === 'summary' ? `## これまでのあらすじ\n以下は要約です。続きを書いてください。\n\n${prevContent}` : `## ここまでの本文\n以下の直後の続きを自然に書いてください。\n\n${prevContent}`);
+  return parts.join('\n\n');
+}
+
+async function renderResult(id) {
+  const g = await DB.get('forgeGenerations', id);
+  if (!g) { location.hash = ''; return; }
+  document.getElementById('header').innerHTML = DS.pageHeader('#generate', '生成へ戻る', ICON);
+  const novels = Store.byUpdatedDesc(await DB.all('novels'));
+  app.innerHTML = `
+    <h1 class="page-title">生成結果</h1>
+    <div class="gen-stats">
+      <div class="gen-stat"><div class="gen-stat-val">${g.inputTokens}</div><div class="gen-stat-label">入力トークン</div></div>
+      <div class="gen-stat"><div class="gen-stat-val">${g.outputTokens}</div><div class="gen-stat-label">出力トークン</div></div>
+      <div class="gen-stat"><div class="gen-stat-val">$${(g.costTotal||0).toFixed(4)}</div><div class="gen-stat-label">コスト</div></div>
+      <div class="gen-stat"><div class="gen-stat-val" style="font-size:0.8rem;">${DS.esc(g.model||'')}</div><div class="gen-stat-label">${DS.esc(g.provider||'')}</div></div>
+    </div>
+    <div class="card"><div class="gen-output">${DS.esc(g.output)}</div></div>
+    <div class="mat-heading">💾 保存</div>
+    <div class="form-group"><input class="form-input" id="saveTitle" placeholder="ノベルのタイトル"></div>
+    <button class="btn btn-primary btn-block" id="saveNew">💾 新しいノベルとして保存</button>
+    ${novels.length?`<div class="form-group mt-3"><label class="form-label">既存ノベルに追記</label><select class="form-select" id="appendTo"><option value="">— 選択 —</option>${novels.map(n=>`<option value="${n.id}">${DS.esc(n.title||'無題')}</option>`).join('')}</select></div>
+    <button class="btn btn-block" id="appendBtn">⬇ 末尾に追記</button>`:''}`;
+  document.getElementById('saveNew').addEventListener('click', async () => {
+    const title = document.getElementById('saveTitle').value.trim();
+    if (!title) { DS.toast('タイトルを入れてください', 'error'); return; }
+    const nid = await DB.add('novels', { title, body: g.output, status: 'draft', tags: [] });
+    g.savedToNovelId = nid; await DB.update('forgeGenerations', g);
+    DS.flash('ノベルとして保存しました'); location.href = 'desire.html#view/' + nid;
+  });
+  document.getElementById('appendBtn')?.addEventListener('click', async () => {
+    const nid = Number(document.getElementById('appendTo').value); if (!nid) { DS.toast('ノベルを選択してください', 'error'); return; }
+    const n = await DB.get('novels', nid); n.body = (n.body||'') + '\n\n' + g.output; await DB.update('novels', n);
+    DS.flash('追記しました'); location.href = 'desire.html#view/' + nid;
+  });
+}
+
+async function renderTemplates() {
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  const tpls = (await DB.all('forgeTemplates')).sort((a,b)=>(b.isPreset?0:1)-(a.isPreset?0:1) || (a.sortOrder||0)-(b.sortOrder||0));
+  app.innerHTML = `
+    <h1 class="page-title">テンプレート</h1>
+    <div id="list"></div>
+    <div class="mat-heading">＋ 自作テンプレート</div>
+    <form id="tf"><div class="form-group"><input class="form-input" name="name" placeholder="名前" required></div>
+      <div class="form-group"><select class="form-select" name="category"><option value="mood">雰囲気</option><option value="style">文体</option><option value="situation">状況</option><option value="custom">その他</option></select></div>
+      <div class="form-group"><textarea class="form-textarea" name="content" style="min-height:80px;" placeholder="AIへの指示内容" required></textarea></div>
+      <button class="btn btn-primary btn-block">追加</button></form>`;
+  const list = document.getElementById('list');
+  for (const t of tpls) {
+    const d = document.createElement('div'); d.className = 'card';
+    d.innerHTML = `<div class="flex-between"><div class="card-title">${DS.esc(t.name)} ${t.isPreset?'<span class="badge badge-complete">プリセット</span>':''}</div></div>
+      <div class="card-excerpt">${DS.esc(t.content)}</div>
+      ${!t.isPreset?`<button class="btn btn-danger btn-sm mt-2" data-del="${t.id}">削除</button>`:''}`;
+    d.querySelector('[data-del]')?.addEventListener('click', async () => { await DB.del('forgeTemplates', t.id); renderTemplates(); });
+    list.appendChild(d);
+  }
+  document.getElementById('tf').addEventListener('submit', async (e) => {
+    e.preventDefault(); const fd = new FormData(e.target);
+    await DB.add('forgeTemplates', { name: fd.get('name').trim(), category: fd.get('category'), content: fd.get('content').trim(), isPreset: 0, sortOrder: 99 });
+    DS.toast('追加しました'); renderTemplates();
+  });
+}
+
+async function renderUsage() {
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  const gens = await DB.all('forgeGenerations');
+  const sum = (k) => gens.reduce((a, g) => a + (Number(g[k])||0), 0);
+  const byProv = {};
+  for (const g of gens) { const p = g.provider||'?'; (byProv[p] ??= { n:0, cost:0 }); byProv[p].n++; byProv[p].cost += Number(g.costTotal)||0; }
+  app.innerHTML = `
+    <h1 class="page-title">使用量</h1><p class="page-subtitle">Usage</p>
+    <div class="gen-stats">
+      <div class="gen-stat"><div class="gen-stat-val">${gens.length}</div><div class="gen-stat-label">生成回数</div></div>
+      <div class="gen-stat"><div class="gen-stat-val">$${sum('costTotal').toFixed(4)}</div><div class="gen-stat-label">合計コスト</div></div>
+      <div class="gen-stat"><div class="gen-stat-val">${sum('inputTokens').toLocaleString()}</div><div class="gen-stat-label">入力トークン</div></div>
+      <div class="gen-stat"><div class="gen-stat-val">${sum('outputTokens').toLocaleString()}</div><div class="gen-stat-label">出力トークン</div></div>
+    </div>
+    <div class="mat-heading">プロバイダー別</div>
+    ${Object.keys(byProv).length ? Object.entries(byProv).map(([p,v])=>`<div class="card"><div class="flex-between"><strong>${DS.esc(p)}</strong><span>${v.n}回 · $${v.cost.toFixed(4)}</span></div></div>`).join('') : '<p class="empty-text" style="text-align:left;">まだ生成履歴がありません。</p>'}`;
+}
+
+window.addEventListener('hashchange', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>
