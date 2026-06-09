@@ -1,0 +1,46 @@
+name: Deploy DreamStudio to GitHub Pages
+
+# local/ フォルダ（静的な創作スタジオ）を GitHub Pages に公開する。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'local/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時実行は1本に絞り、進行中のものはキャンセル。
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Pages をまだ有効化していなくても、ここで自動的に有効化する。
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # local/ の中身だけをサイト直下として公開する。
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./local
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

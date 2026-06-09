@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.hero { min-height: 34vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2rem 1.5rem 1rem; }
+.hero-sigil { width: 60px; height: 60px; position: relative; margin-bottom: 1.5rem; animation: breathe 4s ease-in-out infinite; }
+.hero-sigil::before { content: ''; position: absolute; inset: 0; border: 2px solid var(--orchid); border-radius: 50%; animation: spin 20s linear infinite; }
+.hero-sigil::after { content: '✦'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: var(--rose-gold); }
+@keyframes breathe { 0%,100% { filter: drop-shadow(0 0 6px rgba(124,92,255,0.25)); } 50% { filter: drop-shadow(0 0 14px rgba(124,92,255,0.4)); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hero-title { font-family: 'M PLUS Rounded 1c', sans-serif; font-weight: 800; font-size: clamp(1.8rem, 8vw, 3rem); letter-spacing: 0.02em; line-height: 1.15; background: linear-gradient(135deg, #7c5cff 0%, #ff7eb6 60%, #f59e7a 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.hero-sub { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 0.65rem; letter-spacing: 0.3em; color: var(--orchid); opacity: 0.7; margin-top: 0.6rem; }
+.hero-quote { font-weight: 400; font-size: 0.9rem; color: rgba(58,47,74,0.6); margin-top: 1.2rem; line-height: 1.8; }
+.gates { padding: 0 1rem 1rem; }
+.gate { display: flex; align-items: center; gap: 1rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 1.3rem 1.2rem; margin-bottom: 0.8rem; text-decoration: none; color: inherit; position: relative; overflow: hidden; transition: all 0.3s; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); -webkit-tap-highlight-color: transparent; box-shadow: 0 2px 14px rgba(124,92,255,0.06); }
+.gate::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--orchid), transparent); opacity: 0.3; }
+.gate:active { transform: scale(0.98); }
+.gate-icon { font-size: 1.5rem; flex-shrink: 0; }
+.gate-info { flex: 1; }
+.gate-name { font-family: 'M PLUS Rounded 1c', sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--pearl); letter-spacing: 0.02em; }
+.gate-desc { font-size: 0.8rem; color: rgba(58,47,74,0.55); font-weight: 400; margin-top: 0.2rem; }
+.gate-count { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 0.65rem; color: rgba(124,92,255,0.6); letter-spacing: 0.08em; }
+.gate-arrow { color: var(--orchid); opacity: 0.25; font-size: 1.2rem; flex-shrink: 0; }
+.settings-area { text-align: center; padding: 1.5rem 0 2.5rem; }
+.settings-link { font-size: 0.75rem; color: rgba(124,92,255,0.7); text-decoration: none; letter-spacing: 0.06em; font-family: 'M PLUS Rounded 1c', sans-serif; }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <section class="hero">
+    <div class="hero-sigil"></div>
+    <h1 class="hero-title">Dream<br>Studio</h1>
+    <p class="hero-sub">— your creative studio —</p>
+    <p class="hero-quote">思い描いた物語を、かたちにする場所。</p>
+  </section>
+
+  <nav class="gates">
+    <a href="cradle.html" class="gate gate--cradle"><span class="gate-icon">🏠</span>
+      <div class="gate-info"><div class="gate-name">Cradle</div><div class="gate-desc">拠点とキャラクター — 世界設計</div></div>
+      <span class="gate-count" id="c-cradle"></span><span class="gate-arrow">›</span></a>
+    <a href="forge.html" class="gate gate--forge"><span class="gate-icon">✨</span>
+      <div class="gate-info"><div class="gate-name">Forge</div><div class="gate-desc">AI生成 — 物語のたねを書く</div></div>
+      <span class="gate-count" id="c-forge"></span><span class="gate-arrow">›</span></a>
+    <a href="desire.html" class="gate gate--desire"><span class="gate-icon">📖</span>
+      <div class="gate-info"><div class="gate-name">Desire</div><div class="gate-desc">ノベル — 物語を言葉に</div></div>
+      <span class="gate-count" id="c-desire"></span><span class="gate-arrow">›</span></a>
+    <a href="reverie.html" class="gate gate--reverie"><span class="gate-icon">🖼️</span>
+      <div class="gate-info"><div class="gate-name">Reverie</div><div class="gate-desc">ギャラリー — 画像の展示室</div></div>
+      <span class="gate-count" id="c-reverie"></span><span class="gate-arrow">›</span></a>
+    <a href="memoria.html" class="gate gate--memoria"><span class="gate-icon">📚</span>
+      <div class="gate-info"><div class="gate-name">Memoria</div><div class="gate-desc">プロジェクト・ナレッジ</div></div>
+      <span class="gate-count" id="c-memoria"></span><span class="gate-arrow">›</span></a>
+    <a href="sanctum.html" class="gate gate--sanctum"><span class="gate-icon">🔖</span>
+      <div class="gate-info"><div class="gate-name">Sanctum</div><div class="gate-desc">ブックマーク — 資料の棚</div></div>
+      <span class="gate-count" id="c-sanctum"></span><span class="gate-arrow">›</span></a>
+  </nav>
+
+  <div class="settings-area"><a href="settings.html" class="settings-link">⚙ 設定・バックアップ・AIキー</a></div>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script>
+(async () => {
+  await DS.appInit();
+  const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+  const [bases, residents, novels, images, projects, bookmarks, gens] = await Promise.all([
+    DB.count('bases'), DB.count('residents'), DB.count('novels'),
+    DB.count('images'), DB.count('projects'), DB.count('bookmarks'), DB.count('forgeGenerations'),
+  ]);
+  set('c-cradle', `${bases}拠点 · ${residents}人`);
+  set('c-forge', gens);
+  set('c-desire', novels);
+  set('c-reverie', images);
+  set('c-memoria', projects);
+  set('c-sanctum', bookmarks);
+})();
+</script>
+</body>
+</html>

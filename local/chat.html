@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chat — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.msg { margin-bottom:0.8rem; max-width:85%; }
+.msg-user { margin-left:auto; }
+.msg-bubble { padding:0.7rem 0.9rem; border-radius:14px; font-size:0.92rem; line-height:1.7; white-space:pre-wrap; }
+.msg-user .msg-bubble { background:linear-gradient(135deg,var(--orchid),var(--blush)); color:#fff; border-bottom-right-radius:4px; }
+.msg-ai .msg-bubble { background:var(--card-bg); border:1px solid var(--card-border); color:var(--pearl); border-bottom-left-radius:4px; }
+.msg-name { font-size:0.65rem; color:var(--orchid); margin-bottom:0.2rem; }
+.chat-input-bar { display:flex; gap:0.5rem; align-items:flex-end; margin-top:1rem; }
+.chat-textarea { flex:1; padding:0.7rem 0.9rem; background:rgba(255,255,255,0.85); border:1px solid rgba(124,92,255,0.22); border-radius:12px; color:var(--pearl); font-family:'Noto Sans JP',sans-serif; font-size:0.95rem; outline:none; resize:none; max-height:120px; min-height:44px; }
+.chat-send { width:44px; height:44px; flex-shrink:0; border-radius:50%; background:linear-gradient(135deg,var(--orchid),var(--blush)); border:none; color:#fff; font-size:1.1rem; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ai.js"></script>
+<script>
+const ICON = '💬';
+const app = document.getElementById('app');
+let conv = [];        // {role:'user'|'ai', name, text}
+let cfg = null;       // {mode, providerId, aId, bId}
+
+const sessKey = () => `chat_${cfg.mode}_${cfg.aId||''}_${cfg.bId||''}`;
+function loadConv() { try { conv = JSON.parse(sessionStorage.getItem(sessKey()) || '[]'); } catch { conv = []; } }
+function saveConv() { sessionStorage.setItem(sessKey(), JSON.stringify(conv)); }
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  if (mode === 'char' && id) return startInterview(Number(id));
+  return renderSetup();
+}
+
+async function renderSetup() {
+  document.getElementById('header').innerHTML = DS.pageHeader('forge.html', 'Forge', ICON);
+  const [residents, ready] = await Promise.all([Store.byName(await DB.all('residents')), Store.providersReady()]);
+  if (!ready.length) { app.innerHTML = `<h1 class="page-title">キャラと対話</h1><div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
+  if (!residents.length) { app.innerHTML = `<h1 class="page-title">キャラと対話</h1><div class="card"><div class="card-excerpt">先に Cradle でキャラクターを作成してください。</div><a class="btn btn-sm mt-2" href="cradle.html">Cradleへ</a></div>`; return; }
+  app.innerHTML = `
+    <h1 class="page-title">キャラと対話</h1><p class="page-subtitle">Chat</p>
+    <div class="form-group"><label class="form-label">モード</label><select class="form-select" id="mode">
+      <option value="interview">インタビュー（1対1）</option><option value="duo">デュオ（2キャラの掛け合い）</option></select></div>
+    <div class="form-group"><label class="form-label">AIプロバイダー</label><select class="form-select" id="provider">${ready.map(p=>`<option value="${p.id}">${DS.esc(p.displayName||p.name)}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label" id="aLabel">キャラクター</label><select class="form-select" id="charA">${residents.map(r=>`<option value="${r.id}">${DS.esc(r.name)}</option>`).join('')}</select></div>
+    <div class="form-group" id="bWrap" style="display:none;"><label class="form-label">相手キャラクター</label><select class="form-select" id="charB">${residents.map(r=>`<option value="${r.id}">${DS.esc(r.name)}</option>`).join('')}</select></div>
+    <button class="btn btn-primary btn-block" id="start">対話をはじめる</button>`;
+  document.getElementById('mode').addEventListener('change', (e) => {
+    document.getElementById('bWrap').style.display = e.target.value === 'duo' ? '' : 'none';
+    document.getElementById('aLabel').textContent = e.target.value === 'duo' ? 'キャラ1' : 'キャラクター';
+  });
+  document.getElementById('start').addEventListener('click', () => {
+    const mode = document.getElementById('mode').value;
+    cfg = { mode, providerId: Number(document.getElementById('provider').value), aId: Number(document.getElementById('charA').value), bId: mode==='duo' ? Number(document.getElementById('charB').value) : null };
+    renderChat();
+  });
+}
+
+async function startInterview(charId) {
+  const ready = await Store.providersReady();
+  if (!ready.length) { location.hash = ''; return renderSetup(); }
+  cfg = { mode: 'interview', providerId: ready[0].id, aId: charId, bId: null };
+  renderChat();
+}
+
+function buildCharacterPrompt(r) {
+  let p = `あなたは「${r.name}」というキャラクターです。以下の設定に忠実に、このキャラクターとして会話してください。\n\n## 基本情報\n`;
+  const map = { gender:'性別', height:'身長', bodyType:'体型', style:'系統', features:'特徴' };
+  for (const k in map) if (r[k]) p += `${map[k]}: ${r[k]}\n`;
+  if (r.personality) p += `\n## 性格\n${r.personality}\n`;
+  if ((r.params||[]).length) { p += '\n## 内面パラメーター\n'; for (const pm of r.params) p += `- ${pm.name}: ${pm.value}/10\n`; }
+  for (const cf of (r.customFields||[])) if (cf.name && cf.value) p += `${cf.name}: ${cf.value}\n`;
+  p += '\n## ルール\n- キャラの性格・口調・パラメーターに忠実に応答\n- 自然な日本語の会話文で応答。地の文不要\n- 必要なら短い動作描写のみ\n';
+  return p;
+}
+function buildDuoPrompt(a, b, related) {
+  let p = `あなたは2人のキャラクターの会話を描写します。\n\n## キャラ1: ${a.name}\n`;
+  if (a.personality) p += `性格: ${a.personality}\n`;
+  if ((a.params||[]).length) p += 'パラメーター: ' + a.params.map(pm=>`${pm.name}:${pm.value}/10`).join(', ') + '\n';
+  if (a.features) p += `特徴: ${a.features}\n`;
+  p += `\n## キャラ2: ${b.name}\n`;
+  if (b.personality) p += `性格: ${b.personality}\n`;
+  if ((b.params||[]).length) p += 'パラメーター: ' + b.params.map(pm=>`${pm.name}:${pm.value}/10`).join(', ') + '\n';
+  if (b.features) p += `特徴: ${b.features}\n`;
+  if (related) p += '\n※ この2人は関係性のあるキャラクター同士です\n';
+  p += `\n## ルール\n- 2人の性格・口調に忠実\n- 交互に台詞。名前つき（例: ${a.name}「…」）\n- 3〜5往復で区切る\n- ユーザーの話題に沿って会話\n`;
+  return p;
+}
+
+async function renderChat() {
+  loadConv();
+  document.getElementById('header').innerHTML = DS.pageHeader('chat.html', '対話設定', ICON);
+  const a = await DB.get('residents', cfg.aId);
+  const b = cfg.bId ? await DB.get('residents', cfg.bId) : null;
+  const title = cfg.mode === 'duo' ? `${a.name} × ${b.name}` : a.name;
+  app.innerHTML = `
+    <div class="flex-between"><h1 class="page-title" style="font-size:1.3rem;">${DS.esc(title)}</h1>
+      <button class="btn btn-sm" id="menuBtn">⋯</button></div>
+    <div id="messages" style="margin-top:1rem;"></div>
+    <div class="chat-input-bar">
+      <textarea class="chat-textarea" id="input" placeholder="${cfg.mode==='duo'?'話題を入力…':'メッセージ…'}"></textarea>
+      <button class="chat-send" id="send">➤</button>
+    </div>`;
+  renderMessages();
+  document.getElementById('send').addEventListener('click', send);
+  document.getElementById('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); });
+  document.getElementById('menuBtn').addEventListener('click', chatMenu);
+}
+
+function renderMessages() {
+  const box = document.getElementById('messages');
+  box.innerHTML = conv.map(m => `
+    <div class="msg ${m.role==='user'?'msg-user':'msg-ai'}">
+      ${m.role==='ai' && m.name ? `<div class="msg-name">${DS.esc(m.name)}</div>` : ''}
+      <div class="msg-bubble">${DS.esc(m.text)}</div>
+    </div>`).join('');
+  box.scrollTop = box.scrollHeight;
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+async function send() {
+  const input = document.getElementById('input');
+  const msg = input.value.trim(); if (!msg) return;
+  input.value = '';
+  conv.push({ role: 'user', text: msg }); saveConv(); renderMessages();
+  const sendBtn = document.getElementById('send'); sendBtn.disabled = true; sendBtn.textContent = '…';
+
+  const a = await DB.get('residents', cfg.aId);
+  const b = cfg.bId ? await DB.get('residents', cfg.bId) : null;
+  let sys;
+  if (cfg.mode === 'duo') {
+    const related = (a.candidateIds||[]).includes(b.id) || (b.candidateIds||[]).includes(a.id);
+    sys = buildDuoPrompt(a, b, related);
+  } else sys = buildCharacterPrompt(a);
+
+  // 直近10往復を文章化して渡す
+  const recent = conv.slice(-20);
+  let transcript = recent.map(m => m.role === 'user' ? `ユーザー: ${m.text}` : `${m.name || (cfg.mode==='duo'?'会話':a.name)}: ${m.text}`).join('\n');
+  const user = cfg.mode === 'duo'
+    ? `これまでの会話:\n${transcript}\n\n上記の話題で、${a.name}と${b.name}の会話を続けてください。`
+    : `これまでの会話:\n${transcript}\n\n${a.name}として返答してください。`;
+
+  const provider = await DB.get('apiProviders', cfg.providerId);
+  const res = await AI.call(provider, sys, user);
+  sendBtn.disabled = false; sendBtn.textContent = '➤';
+  if (res.error) { DS.toast(res.error, 'error'); return; }
+  conv.push({ role: 'ai', name: cfg.mode === 'duo' ? null : a.name, text: res.text.trim() }); saveConv(); renderMessages();
+  await DB.add('forgeGenerations', { provider: res.provider, model: res.model, promptSystem: sys, promptUser: user, output: res.text, inputTokens: res.inputTokens, outputTokens: res.outputTokens, cachedTokens: res.cachedTokens, costInput: res.costInput, costOutput: res.costOutput, costTotal: res.costTotal });
+}
+
+async function chatMenu() {
+  const a = await DB.get('residents', cfg.aId);
+  const ok = await DS.confirmDialog('この会話をノベルとして保存しますか？（「やめる」で会話をリセット）', 'ノベルに保存', false);
+  if (ok) {
+    if (!conv.length) { DS.toast('会話がありません', 'error'); return; }
+    const b = cfg.bId ? await DB.get('residents', cfg.bId) : null;
+    const title = (cfg.mode === 'duo' ? `${a.name}×${b.name}の会話` : `${a.name}との対話`);
+    const body = conv.map(m => m.role === 'user' ? `ユーザー: ${m.text}` : `${m.name || ''}${m.name?'「':''}${m.text}${m.name?'」':''}`).join('\n\n');
+    const nid = await DB.add('novels', { title, body, status: 'draft', tags: ['対話'] });
+    DS.flash('ノベルとして保存しました'); location.href = 'desire.html#view/' + nid;
+  } else {
+    conv = []; saveConv(); renderMessages(); DS.toast('会話をリセットしました');
+  }
+}
+
+window.addEventListener('hashchange', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>

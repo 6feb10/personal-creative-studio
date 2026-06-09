@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>設定 — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.set-section { margin-bottom: 1.6rem; }
+.set-head { font-family: 'M PLUS Rounded 1c', sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--pearl); margin: 1.4rem 0 0.4rem; }
+.set-note { font-size: 0.8rem; color: rgba(58,47,74,0.6); line-height: 1.7; margin-bottom: 0.8rem; }
+.provider-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1rem; margin-bottom: 0.8rem; }
+.provider-card .form-group { margin-bottom: 0.7rem; }
+.prov-row { display: flex; gap: 0.5rem; align-items: center; }
+.mini-label { font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--orchid); opacity: 0.75; font-family: 'M PLUS Rounded 1c', sans-serif; }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <h1 class="page-title">設定</h1>
+  <p class="page-subtitle">Settings</p>
+
+  <div class="set-section">
+    <div class="set-head">💾 バックアップ / 引っ越し</div>
+    <p class="set-note">データはこの端末のブラウザ内だけに保存されます。別の端末へ移すときや、念のための保存に、1ファイルとして書き出し/読み込みできます。<br>※ 画像も含むため、容量が大きいと時間がかかります。APIキーは安全のためバックアップに含まれません。</p>
+    <button class="btn btn-primary btn-block" id="exportBtn">⬇ バックアップを書き出す</button>
+    <div style="height:0.6rem"></div>
+    <label class="btn btn-block" style="cursor:pointer;">⬆ バックアップを読み込む（上書き）
+      <input type="file" id="importInput" accept="application/json" style="display:none;">
+    </label>
+    <p class="set-note" id="storageInfo" style="margin-top:0.8rem;"></p>
+  </div>
+
+  <div class="set-section">
+    <div class="set-head">✨ AIキー（任意）</div>
+    <p class="set-note">AI生成・キャラ対話・挿絵プロンプトを使うには、各社のAPIキーが必要です。<strong>AIを使わなくても、創作管理機能はすべて使えます。</strong><br>キーは<strong>この端末の中だけ</strong>に保存され、外部には送られません（AI社への直接通信を除く）。</p>
+    <div id="providerList"></div>
+    <div class="prov-row" style="margin-top:0.6rem;">
+      <select class="form-select" id="presetSelect" style="flex:1;"></select>
+      <button class="btn btn-sm" id="addProviderBtn">＋ 追加</button>
+    </div>
+    <p class="set-note" style="margin-top:0.6rem;">キーの取得先: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI</a> / <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic(Claude)</a> / <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google(Gemini)</a></p>
+  </div>
+
+  <div class="set-section">
+    <div class="set-head">⚠ データ管理</div>
+    <button class="btn btn-danger btn-block" id="wipeBtn">すべてのデータを削除</button>
+  </div>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/backup.js"></script>
+<script>
+(async () => {
+  await DS.appInit();
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', '⚙');
+
+  // ── storage estimate ──
+  if (navigator.storage?.estimate) {
+    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+    const mb = (n) => (n / 1024 / 1024).toFixed(1);
+    document.getElementById('storageInfo').textContent = `使用容量: 約 ${mb(usage)} MB`;
+  }
+
+  // ── backup ──
+  document.getElementById('exportBtn').addEventListener('click', async () => {
+    try { await Backup.exportAll(); DS.toast('バックアップを書き出しました'); }
+    catch (e) { DS.toast('書き出しに失敗: ' + e.message, 'error'); }
+  });
+  document.getElementById('importInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    if (!await DS.confirmDialog('現在のデータを、読み込んだ内容で上書きします。よろしいですか？', '上書きする')) { e.target.value = ''; return; }
+    try { await Backup.importAll(file); DS.flash('バックアップを読み込みました'); location.reload(); }
+    catch (err) { DS.toast('読み込みに失敗: ' + err.message, 'error'); e.target.value = ''; }
+  });
+
+  // ── wipe ──
+  document.getElementById('wipeBtn').addEventListener('click', async () => {
+    if (!await DS.confirmDialog('本当にすべてのデータを削除しますか？元に戻せません。', '全削除')) return;
+    for (const s of [...DB.storeNames(), 'settings']) await DB.clear(s);
+    DS.flash('すべてのデータを削除しました'); location.reload();
+  });
+
+  // ── AI providers ──
+  const presetSel = document.getElementById('presetSelect');
+  AI.presets.forEach((p, i) => { const o = document.createElement('option'); o.value = i; o.textContent = p.displayName + '（' + p.providerType + '）'; presetSel.appendChild(o); });
+
+  async function renderProviders() {
+    const list = document.getElementById('providerList');
+    const providers = Store.byName(await DB.all('apiProviders'));
+    if (providers.length === 0) { list.innerHTML = '<p class="set-note">まだAIプロバイダーがありません。下から追加できます。</p>'; return; }
+    list.innerHTML = '';
+    for (const p of providers) {
+      const card = document.createElement('div');
+      card.className = 'provider-card';
+      card.innerHTML = `
+        <div class="flex-between" style="margin-bottom:0.6rem;">
+          <strong>${DS.esc(p.displayName || p.name)}</strong>
+          <label class="prov-row" style="gap:0.3rem;font-size:0.75rem;"><input type="checkbox" data-f="enabled" ${p.enabled ? 'checked' : ''}> 有効</label>
+        </div>
+        <div class="form-group"><div class="mini-label">APIキー</div><input class="form-input" type="password" data-f="apiKey" value="${DS.esc(p.apiKey || '')}" placeholder="sk-..."></div>
+        <div class="form-group"><div class="mini-label">モデルID</div><input class="form-input" data-f="model" value="${DS.esc(p.model || '')}"></div>
+        <div class="form-group"><div class="mini-label">エンドポイント</div><input class="form-input" data-f="endpoint" value="${DS.esc(p.endpoint || '')}"></div>
+        <div class="prov-row">
+          <div class="form-group" style="flex:1;margin:0;"><div class="mini-label">入力 $/1M</div><input class="form-input" data-f="costInput" inputmode="decimal" value="${DS.esc(p.costInput ?? 0)}"></div>
+          <div class="form-group" style="flex:1;margin:0;"><div class="mini-label">出力 $/1M</div><input class="form-input" data-f="costOutput" inputmode="decimal" value="${DS.esc(p.costOutput ?? 0)}"></div>
+        </div>
+        <div class="prov-row" style="margin-top:0.7rem;">
+          <button class="btn btn-sm" data-act="save" style="flex:1;">保存</button>
+          <button class="btn btn-danger btn-sm" data-act="del">削除</button>
+        </div>`;
+      card.addEventListener('click', async (ev) => {
+        const act = ev.target.closest('[data-act]')?.dataset.act;
+        if (act === 'save') {
+          const g = (f) => card.querySelector(`[data-f="${f}"]`);
+          p.apiKey = g('apiKey').value.trim();
+          p.model = g('model').value.trim();
+          p.endpoint = g('endpoint').value.trim();
+          p.costInput = parseFloat(g('costInput').value) || 0;
+          p.costOutput = parseFloat(g('costOutput').value) || 0;
+          p.enabled = g('enabled').checked ? 1 : 0;
+          await DB.update('apiProviders', p);
+          DS.toast('保存しました');
+        } else if (act === 'del') {
+          if (!await DS.confirmDialog('このプロバイダーを削除しますか？')) return;
+          await DB.del('apiProviders', p.id); renderProviders();
+        }
+      });
+      list.appendChild(card);
+    }
+  }
+
+  document.getElementById('addProviderBtn').addEventListener('click', async () => {
+    const preset = AI.presets[Number(presetSel.value) || 0];
+    await DB.add('apiProviders', { ...preset, apiKey: '', costInput: 0, costOutput: 0, enabled: 1 });
+    renderProviders();
+  });
+
+  renderProviders();
+})();
+</script>
+</body>
+</html>

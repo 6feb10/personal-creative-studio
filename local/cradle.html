@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cradle — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.detail-heading { font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; color:var(--pearl); font-size:0.9rem; margin:1.4rem 0 0.5rem; }
+.param-row { display:flex; align-items:center; gap:0.6rem; margin-bottom:0.5rem; }
+.param-row .pname { flex:1; }
+.param-bar { height:6px; background:rgba(124,92,255,0.12); border-radius:3px; overflow:hidden; }
+.param-fill { height:100%; background:linear-gradient(90deg,var(--orchid),var(--blush)); }
+.rep-row { display:flex; gap:0.4rem; margin-bottom:0.4rem; align-items:center; }
+.chk-list { display:flex; flex-wrap:wrap; gap:0.4rem; }
+.chk { font-size:0.78rem; padding:0.35rem 0.7rem; border:1px solid rgba(124,92,255,0.22); border-radius:20px; cursor:pointer; }
+.chk input { display:none; }
+.chk.on { background:rgba(124,92,255,0.15); border-color:var(--orchid); color:var(--orchid); }
+.avatar { width:40px; height:40px; border-radius:50%; background:rgba(124,92,255,0.12); display:flex; align-items:center; justify-content:center; font-size:1.2rem; }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ai.js"></script>
+<script>
+const ICON = '🏠';
+const app = document.getElementById('app');
+const DEFAULT_PARAMS = [{name:'社交性',value:5},{name:'感情表現',value:5},{name:'行動力',value:5},{name:'好奇心',value:5}];
+const BODY = {
+  '男性': ['細身','標準','筋肉質','がっしり','大柄','ぽっちゃり','小柄'],
+  '女性': ['華奢','スレンダー','標準','ふくよか','ぽっちゃり','がっしり','小柄'],
+};
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  if (mode === 'base') return editBase(id);
+  if (mode === 'res') return editResident(id);
+  if (mode === 'resview') return viewResident(id);
+  return renderList();
+}
+
+async function renderList() {
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  const [bases, residents] = await Promise.all([Store.byName(await DB.all('bases')), Store.byName(await DB.all('residents'))]);
+  app.innerHTML = `
+    <h1 class="page-title">世界設計</h1><p class="page-subtitle">Cradle</p>
+    <div class="flex-between detail-heading">拠点 <a class="btn btn-sm" href="#base">＋ 拠点</a></div>
+    <div id="bases"></div>
+    <div class="flex-between detail-heading">キャラクター <a class="btn btn-sm" href="#res">＋ キャラ</a></div>
+    <div id="residents"></div>`;
+  const bw = document.getElementById('bases');
+  if (!bases.length) bw.innerHTML = '<p class="empty-text" style="text-align:left;font-size:0.82rem;">まだ拠点がありません。</p>';
+  for (const b of bases) {
+    const cnt = residents.filter(r=>r.baseId===b.id).length;
+    const d = document.createElement('div'); d.className='card';
+    d.innerHTML = `<a href="#base/${b.id}"><div class="card-title">🏠 ${DS.esc(b.name)}</div>${b.description?`<div class="card-excerpt">${DS.esc(DS.excerpt(b.description,70))}</div>`:''}<div class="card-meta">${cnt}人</div></a>`;
+    bw.appendChild(d);
+  }
+  const rw = document.getElementById('residents');
+  if (!residents.length) rw.innerHTML = '<p class="empty-text" style="text-align:left;font-size:0.82rem;">まだキャラクターがいません。</p>';
+  for (const r of residents) {
+    const baseName = bases.find(b=>b.id===r.baseId)?.name;
+    const d = document.createElement('div'); d.className='card';
+    d.innerHTML = `<a href="#resview/${r.id}"><div class="flex-between"><div class="card-title">👤 ${DS.esc(r.name)}</div></div>
+      <div class="card-meta">${[r.gender, baseName].filter(Boolean).map(DS.esc).join(' · ')}</div>
+      ${r.personality?`<div class="card-excerpt">${DS.esc(DS.excerpt(r.personality,70))}</div>`:''}</a>`;
+    rw.appendChild(d);
+  }
+}
+
+// ── 拠点編集 ──
+async function editBase(id) {
+  const b = id ? await DB.get('bases', id) : null;
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  app.innerHTML = `<h1 class="page-title">${b?'拠点を編集':'拠点を追加'}</h1>
+    <form id="f" class="mt-3">
+      <div class="form-group"><label class="form-label">名前</label><input class="form-input" name="name" value="${DS.esc(b?.name||'')}" required></div>
+      <div class="form-group"><label class="form-label">説明</label><textarea class="form-textarea" name="description" style="min-height:120px;">${DS.esc(b?.description||'')}</textarea></div>
+      <button type="submit" class="btn btn-primary btn-block">${b?'保存':'追加'}</button>
+      ${b?`<button type="button" class="btn btn-danger btn-block mt-2" id="del">削除</button>`:''}
+    </form>`;
+  document.getElementById('f').onsubmit = async (e) => {
+    e.preventDefault(); const fd = new FormData(e.target); const rec = b||{};
+    rec.name = fd.get('name').trim(); rec.description = fd.get('description').trim();
+    if (b) await DB.update('bases', rec); else await DB.add('bases', rec);
+    DS.flash(b?'保存しました':'追加しました'); location.hash = '';
+  };
+  document.getElementById('del')?.addEventListener('click', async () => {
+    if (!await DS.confirmDialog('この拠点を削除しますか？')) return;
+    await DB.del('bases', b.id); DS.flash('削除しました'); location.hash = '';
+  });
+}
+
+// ── キャラ表示 ──
+async function viewResident(id) {
+  const r = await DB.get('residents', id);
+  if (!r) { location.hash=''; return; }
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  const [bases, residents, hasAI] = await Promise.all([DB.all('bases'), DB.all('residents'), Store.hasAnyAI()]);
+  const baseName = bases.find(b=>b.id===r.baseId)?.name;
+  const candNames = (r.candidateIds||[]).map(i=>residents.find(x=>x.id===i)?.name).filter(Boolean);
+  const field = (label,val) => val ? `<div class="param-row"><div class="pname" style="color:rgba(58,47,74,0.6);font-size:0.8rem;">${label}</div><div style="flex:2;">${DS.esc(val)}</div></div>` : '';
+  app.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.8rem;"><div class="avatar">👤</div><h1 class="page-title" style="margin:0;">${DS.esc(r.name)}</h1></div>
+    <div class="prov-row" style="display:flex;gap:0.5rem;margin:1rem 0;">
+      <a class="btn btn-sm" href="#res/${r.id}" style="flex:1;">編集</a>
+      <a class="btn btn-sm" href="chat.html#char/${r.id}" style="flex:1;">💬 対話</a>
+    </div>
+    <div class="detail-heading">基本情報</div>
+    ${field('性別', r.gender)}${field('所属', baseName)}${field('身長', r.height)}${field('体型', r.bodyType)}${field('その他身体情報', r.physicalInfo)}
+    <div class="detail-heading">外見</div>
+    ${field('髪型', r.hairstyle)}${field('目の色', r.eyeColor)}${field('服装', r.clothing)}${field('系統', r.style)}${field('特徴', r.features)}
+    ${r.personality?`<div class="detail-heading">性格</div><p class="card-excerpt">${DS.esc(r.personality).replace(/\n/g,'<br>')}</p>`:''}
+    ${(r.params||[]).length?`<div class="detail-heading">パラメーター</div>${r.params.map(p=>`<div class="param-row"><div class="pname">${DS.esc(p.name)}</div><div style="flex:2;"><div class="param-bar"><div class="param-fill" style="width:${(Number(p.value)||0)*10}%"></div></div></div><div style="width:24px;text-align:right;">${DS.esc(p.value)}</div></div>`).join('')}`:''}
+    ${(r.customFields||[]).length?`<div class="detail-heading">自由項目</div>${r.customFields.map(c=>field(c.name,c.value)).join('')}`:''}
+    ${candNames.length?`<div class="detail-heading">関係するキャラ</div><div class="card-tags">${candNames.map(n=>`<span class="tag">🤝 ${DS.esc(n)}</span>`).join('')}</div>`:''}
+    <div class="detail-heading">🎨 イラストプロンプト</div>
+    <div id="illustArea">
+      ${r.illustPrompt?`<div class="card"><div class="card-excerpt" style="font-family:monospace;font-size:0.78rem;">${DS.esc(r.illustPrompt)}</div></div>
+        <button class="btn btn-sm" id="copyPrompt">📋 コピー</button>`:''}
+      ${hasAI?`<button class="btn btn-sm ${r.illustPrompt?'mt-2':''}" id="genPrompt">${r.illustPrompt?'再生成':'画像生成AI向けプロンプトを作る'}</button>`
+             :`<p class="form-hint">AIキーを設定すると、外見からプロンプトを自動生成できます。<a href="settings.html" style="color:var(--orchid);">設定へ</a></p>`}
+    </div>`;
+  document.getElementById('copyPrompt')?.addEventListener('click', () => { navigator.clipboard?.writeText(r.illustPrompt); DS.toast('コピーしました'); });
+  document.getElementById('genPrompt')?.addEventListener('click', () => genCharPrompt(r));
+}
+
+async function genCharPrompt(r) {
+  const ready = await Store.providersReady();
+  if (!ready.length) { DS.toast('AIキーが未設定です', 'error'); return; }
+  const btn = document.getElementById('genPrompt'); btn.disabled = true; btn.textContent = '生成中…';
+  const sys = `あなたは画像生成AI向けのキャラクタープロンプト作成の専門家です。与えられたキャラクター設定を、Stable Diffusion / Midjourney 等で使える英語の外見描写プロンプトに変換してください。出力ルール: 英語、カンマ区切りのタグ列、外見のみ（性格は含めない）、性別・髪型髪色・目・体型・服装などを含める。プロンプト本文のみを出力。`;
+  const desc = [
+    r.gender && `性別:${r.gender}`, r.height && `身長:${r.height}`, r.bodyType && `体型:${r.bodyType}`,
+    r.hairstyle && `髪型:${r.hairstyle}`, r.eyeColor && `目:${r.eyeColor}`, r.clothing && `服装:${r.clothing}`,
+    r.style && `系統:${r.style}`, r.features && `特徴:${r.features}`, r.physicalInfo && `その他:${r.physicalInfo}`,
+  ].filter(Boolean).join('\n');
+  const res = await AI.call(ready[0], sys, `キャラクター名: ${r.name}\n${desc}`);
+  if (res.error) { DS.toast(res.error, 'error'); btn.disabled = false; btn.textContent = '再試行'; return; }
+  r.illustPrompt = res.text.trim();
+  await DB.update('residents', r);
+  await DB.add('forgeGenerations', { provider: res.provider, model: res.model, promptSystem: sys, promptUser: r.name, output: res.text, inputTokens: res.inputTokens, outputTokens: res.outputTokens, cachedTokens: res.cachedTokens, costInput: res.costInput, costOutput: res.costOutput, costTotal: res.costTotal });
+  DS.toast('プロンプトを生成しました'); viewResident(r.id);
+}
+
+// ── キャラ編集 ──
+async function editResident(id) {
+  const r = id ? await DB.get('residents', id) : null;
+  const [bases, others] = await Promise.all([Store.byName(await DB.all('bases')), Store.byName((await DB.all('residents')).filter(x=>!id||x.id!=id))]);
+  document.getElementById('header').innerHTML = DS.pageHeader(id?`#resview/${id}`:'#', '戻る', ICON);
+  const params = (r?.params?.length ? r.params : DEFAULT_PARAMS).map(p=>({...p}));
+  const selCand = new Set(r?.candidateIds||[]);
+  const tf = (name,label,val,ph='') => `<div class="form-group"><label class="form-label">${label}</label><input class="form-input" name="${name}" value="${DS.esc(val||'')}" placeholder="${ph}"></div>`;
+  app.innerHTML = `
+    <h1 class="page-title">${r?'キャラを編集':'キャラを追加'}</h1>
+    <form id="f" class="mt-3">
+      <div class="detail-heading">基本情報</div>
+      ${tf('name','名前',r?.name)}
+      <div class="form-group"><label class="form-label">性別</label><select class="form-select" name="gender" id="gender">
+        ${['','男性','女性','その他'].map(g=>`<option value="${g}" ${(r?.gender||'')===g?'selected':''}>${g||'— 選択 —'}</option>`).join('')}</select></div>
+      ${bases.length?`<div class="form-group"><label class="form-label">所属拠点</label><select class="form-select" name="baseId"><option value="">— なし —</option>
+        ${bases.map(b=>`<option value="${b.id}" ${r?.baseId==b.id?'selected':''}>${DS.esc(b.name)}</option>`).join('')}</select></div>`:''}
+      ${tf('height','身長',r?.height,'例：172cm')}
+      <div class="form-group"><label class="form-label">体型</label><div id="bodyWrap"></div></div>
+      ${tf('physicalInfo','その他身体情報',r?.physicalInfo,'特技、癖、その他の設定など')}
+      <div class="detail-heading">外見</div>
+      ${tf('hairstyle','髪型',r?.hairstyle)}${tf('eyeColor','目の色',r?.eyeColor)}${tf('clothing','服装',r?.clothing)}${tf('style','系統',r?.style)}${tf('features','特徴',r?.features)}
+      <div class="detail-heading">性格</div>
+      <div class="form-group"><textarea class="form-textarea" name="personality" style="min-height:100px;">${DS.esc(r?.personality||'')}</textarea></div>
+      <div class="detail-heading">パラメーター（0〜10）</div>
+      <div id="params"></div><button type="button" class="btn btn-sm" id="addParam">＋ 項目追加</button>
+      <div class="detail-heading">自由項目</div>
+      <div id="cfields"></div><button type="button" class="btn btn-sm" id="addCf">＋ 項目追加</button>
+      ${others.length?`<div class="detail-heading">関係するキャラ</div><div class="chk-list" id="cands">
+        ${others.map(o=>`<label class="chk ${selCand.has(o.id)?'on':''}"><input type="checkbox" value="${o.id}" ${selCand.has(o.id)?'checked':''}>${DS.esc(o.name)}</label>`).join('')}</div>`:''}
+      <button type="submit" class="btn btn-primary btn-block mt-3">${r?'保存':'追加'}</button>
+      ${r?`<button type="button" class="btn btn-danger btn-block mt-2" id="del">削除</button>`:''}
+    </form>`;
+
+  // body type (gender dependent)
+  const bodyWrap = document.getElementById('bodyWrap');
+  const renderBody = () => {
+    const g = document.getElementById('gender').value;
+    const opts = BODY[g];
+    if (opts) bodyWrap.innerHTML = `<select class="form-select" name="bodyType"><option value="">— 選択 —</option>${opts.map(o=>`<option value="${o}" ${r?.bodyType===o?'selected':''}>${o}</option>`).join('')}</select>`;
+    else bodyWrap.innerHTML = `<input class="form-input" name="bodyType" value="${DS.esc(r?.bodyType||'')}" placeholder="自由入力">`;
+  };
+  document.getElementById('gender').addEventListener('change', renderBody); renderBody();
+
+  // params
+  const paramsWrap = document.getElementById('params');
+  const addParam = (p={name:'',value:5}) => { const d=document.createElement('div'); d.className='rep-row';
+    d.innerHTML=`<input class="form-input p-name" placeholder="項目名" value="${DS.esc(p.name)}" style="flex:1;"><input type="range" class="p-val" min="0" max="10" value="${Number(p.value)||0}" style="flex:1.2;"><span class="p-num" style="width:20px;text-align:right;">${Number(p.value)||0}</span><button type="button" class="btn btn-sm" data-rm>×</button>`;
+    d.querySelector('.p-val').addEventListener('input', e=>d.querySelector('.p-num').textContent=e.target.value);
+    d.querySelector('[data-rm]').onclick=()=>d.remove(); paramsWrap.appendChild(d); };
+  params.forEach(addParam);
+  document.getElementById('addParam').onclick = () => addParam();
+
+  // custom fields
+  const cfWrap = document.getElementById('cfields');
+  const addCf = (c={name:'',value:''}) => { const d=document.createElement('div'); d.className='rep-row';
+    d.innerHTML=`<input class="form-input cf-name" placeholder="ラベル" value="${DS.esc(c.name)}" style="flex:1;"><input class="form-input cf-val" placeholder="内容" value="${DS.esc(c.value)}" style="flex:1.5;"><button type="button" class="btn btn-sm" data-rm>×</button>`;
+    d.querySelector('[data-rm]').onclick=()=>d.remove(); cfWrap.appendChild(d); };
+  (r?.customFields||[]).forEach(addCf);
+  document.getElementById('addCf').onclick = () => addCf();
+
+  app.querySelectorAll('.chk input').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.chk').classList.toggle('on',cb.checked)));
+
+  document.getElementById('f').onsubmit = async (e) => {
+    e.preventDefault(); const fd = new FormData(e.target); const rec = r||{};
+    for (const k of ['name','gender','height','physicalInfo','hairstyle','eyeColor','clothing','style','features','personality','bodyType']) rec[k] = (fd.get(k)||'').trim();
+    rec.baseId = fd.get('baseId') ? Number(fd.get('baseId')) : null;
+    rec.params = [...paramsWrap.querySelectorAll('.rep-row')].map(d=>({name:d.querySelector('.p-name').value.trim(), value:Number(d.querySelector('.p-val').value)})).filter(p=>p.name);
+    rec.customFields = [...cfWrap.querySelectorAll('.rep-row')].map(d=>({name:d.querySelector('.cf-name').value.trim(), value:d.querySelector('.cf-val').value.trim()})).filter(c=>c.name);
+    rec.candidateIds = [...app.querySelectorAll('#cands input:checked')].map(c=>Number(c.value));
+    let nid;
+    if (r) { await DB.update('residents', rec); nid = r.id; } else { nid = await DB.add('residents', rec); }
+    DS.flash(r?'保存しました':'追加しました'); location.hash = 'resview/' + nid;
+  };
+  document.getElementById('del')?.addEventListener('click', async () => {
+    if (!await DS.confirmDialog('このキャラクターを削除しますか？')) return;
+    await DB.del('residents', r.id); DS.flash('削除しました'); location.hash = '';
+  });
+}
+
+window.addEventListener('hashchange', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>

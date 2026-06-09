@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Desire — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.still-frame { margin: 1.5rem -1rem; position: relative; animation: still-fadein 0.6s ease; }
+.still-frame img { width: 100%; display: block; }
+.still-caption { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.5rem 1rem 0.8rem; color: #fff; font-size: 0.8rem; background: linear-gradient(to top, rgba(20,15,28,0.8), transparent); }
+@keyframes still-fadein { from { opacity: 0; } }
+.novel-text-block { font-size: 1rem; line-height: 2.1; color: var(--pearl); font-weight: 400; white-space: normal; }
+.picker-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; max-height: 50vh; overflow-y: auto; }
+.picker-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+<a href="#edit" class="fab" id="fab">＋</a>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script>
+const STORE = 'novels', ICON = '📖';
+const app = document.getElementById('app');
+const parseTags = (s) => [...new Set(String(s||'').split(/[,、\s]+/).map(t=>t.trim()).filter(Boolean))];
+const countChars = (s) => [...String(s||'').replace(/\{\{img:\d+\}\}/g,'')].length;
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  document.getElementById('fab').style.display = (mode === 'edit' || mode === 'view') ? 'none' : '';
+  if (mode === 'edit') return renderEdit(id);
+  if (mode === 'view') return renderView(id);
+  return renderList();
+}
+
+async function renderList() {
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  const rows = Store.byUpdatedDesc(await DB.all(STORE));
+  if (rows.length === 0) {
+    app.innerHTML = `<h1 class="page-title">ノベル</h1><p class="page-subtitle">Desire</p>
+      <div class="empty"><div class="empty-icon">📖</div><p class="empty-text">まだ物語がありません。<br>最初のストーリーを、ここに。</p></div>`;
+    return;
+  }
+  const tags = Store.collectTags(rows);
+  const active = new URLSearchParams(location.search).get('tag') || '';
+  const filtered = active ? rows.filter(r => (r.tags||[]).includes(active)) : rows;
+  app.innerHTML = `
+    <h1 class="page-title">ノベル</h1><p class="page-subtitle">Desire · ${rows.length}</p>
+    ${tags.length ? `<div class="filters"><a class="filter-chip ${!active?'active':''}" href="?">すべて</a>
+      ${tags.map(t=>`<a class="filter-chip ${active===t?'active':''}" href="?tag=${encodeURIComponent(t)}">${DS.esc(t)}</a>`).join('')}</div>` : ''}
+    <div id="cards"></div>`;
+  const wrap = document.getElementById('cards');
+  for (const n of filtered) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<a href="#view/${n.id}">
+      <div class="flex-between"><div class="card-title">${DS.esc(n.title || '無題')}</div>
+        <span class="badge badge-${n.status==='complete'?'complete':'draft'}">${n.status==='complete'?'完成':'下書き'}</span></div>
+      <div class="card-meta">${DS.fmtDate(n.updatedAt)} · ${countChars(n.body)}文字</div>
+      <div class="card-excerpt">${DS.esc(DS.excerpt(n.body, 90))}</div>
+      ${(n.tags||[]).length ? `<div class="card-tags">${n.tags.map(t=>`<span class="tag">${DS.esc(t)}</span>`).join('')}</div>` : ''}
+    </a>`;
+    wrap.appendChild(card);
+  }
+}
+
+async function renderView(id) {
+  const n = await DB.get(STORE, id);
+  if (!n) { location.hash = ''; return; }
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  const ids = Store.imageIdsInBody(n.body);
+  const imgMap = new Map();
+  for (const iid of ids) { const im = await DB.get('images', iid); if (im) imgMap.set(iid, im); }
+  app.innerHTML = `
+    <div class="flex-between"><h1 class="page-title">${DS.esc(n.title || '無題')}</h1></div>
+    <div class="card-meta">${DS.fmtDate(n.updatedAt)} · ${countChars(n.body)}文字 · <span class="badge badge-${n.status==='complete'?'complete':'draft'}">${n.status==='complete'?'完成':'下書き'}</span></div>
+    ${(n.tags||[]).length ? `<div class="card-tags mt-1">${n.tags.map(t=>`<span class="tag">${DS.esc(t)}</span>`).join('')}</div>` : ''}
+    <div class="prov-row" style="display:flex;gap:0.5rem;margin:1rem 0;">
+      <a class="btn btn-sm" href="#edit/${n.id}" style="flex:1;">編集</a>
+      <a class="btn btn-sm" href="illustrate.html#novel/${n.id}" style="flex:1;">🎨 挿絵</a>
+    </div>
+    <div class="novel-body">${Store.renderNovelBody(n.body, imgMap) || '<p class="empty-text">本文がありません。</p>'}</div>`;
+}
+
+async function renderEdit(id) {
+  const n = id ? await DB.get(STORE, id) : null;
+  const projects = Store.byName(await DB.all('projects'));
+  document.getElementById('header').innerHTML = DS.pageHeader(id ? `#view/${id}` : '#', '戻る', ICON);
+  app.innerHTML = `
+    <h1 class="page-title">${n ? '物語を編集' : '新しい物語'}</h1>
+    <form id="f" class="mt-3">
+      <div class="form-group"><input class="form-input" name="title" value="${DS.esc(n?.title||'')}" placeholder="無題の物語" required></div>
+      <div class="prov-row" style="display:flex;gap:0.5rem;">
+        <select class="form-select" name="status" style="flex:1;">
+          <option value="draft" ${n?.status!=='complete'?'selected':''}>下書き</option>
+          <option value="complete" ${n?.status==='complete'?'selected':''}>完成</option>
+        </select>
+        <button type="button" class="btn btn-sm" id="insertImg" style="flex:1;">🖼️ 画像を挿入</button>
+      </div>
+      <div class="form-group mt-2">
+        <div class="flex-between"><label class="form-label">本文</label><span class="form-hint" id="cc">0 文字</span></div>
+        <textarea class="form-textarea" name="body" id="body" style="min-height:300px;">${DS.esc(n?.body||'')}</textarea>
+      </div>
+      ${projects.length ? `<div class="form-group"><label class="form-label">プロジェクト</label>
+        <select class="form-select" name="projectId"><option value="">— なし —</option>
+        ${projects.map(p=>`<option value="${p.id}" ${n?.projectId==p.id?'selected':''}>${DS.esc(p.name)}</option>`).join('')}</select></div>` : ''}
+      <div class="form-group"><label class="form-label">タグ</label><input class="form-input" name="tags" value="${DS.esc((n?.tags||[]).join(', '))}" placeholder="例: 恋愛, ファンタジー, 日常"></div>
+      <button type="submit" class="btn btn-primary btn-block">${n ? '保存' : '作成'}</button>
+      ${n ? `<button type="button" class="btn btn-danger btn-block mt-2" id="del">削除</button>` : ''}
+    </form>`;
+  const body = document.getElementById('body');
+  const cc = document.getElementById('cc');
+  const upd = () => cc.textContent = countChars(body.value) + ' 文字';
+  body.addEventListener('input', upd); upd();
+  document.getElementById('insertImg').addEventListener('click', () => openPicker(body, upd));
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rec = n || {};
+    rec.title = fd.get('title').trim();
+    rec.body = fd.get('body');
+    rec.status = fd.get('status');
+    rec.projectId = fd.get('projectId') ? Number(fd.get('projectId')) : null;
+    rec.tags = parseTags(fd.get('tags'));
+    let nid;
+    if (n) { await DB.update(STORE, rec); nid = n.id; } else { nid = await DB.add(STORE, rec); }
+    DS.flash(n ? '保存しました' : '作成しました');
+    location.hash = 'view/' + nid;
+  });
+  document.getElementById('del')?.addEventListener('click', async () => {
+    if (!await DS.confirmDialog('この物語を削除しますか？')) return;
+    await DB.del(STORE, n.id); DS.flash('削除しました'); location.hash = '';
+  });
+}
+
+async function openPicker(textarea, onInsert) {
+  const images = Store.byCreatedDesc(await DB.all('images'));
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay show';
+  overlay.innerHTML = `<div class="modal-box" style="max-width:420px;text-align:left;">
+    <div class="flex-between"><strong>画像を挿入</strong><button class="btn btn-sm" data-act="cancel">閉じる</button></div>
+    ${images.length ? `<div class="picker-grid mt-2" id="pg"></div>` : '<p class="empty-text mt-2">ギャラリーに画像がありません。先に Reverie で追加してください。</p>'}</div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (e) => { if (e.target === overlay || e.target.closest('[data-act="cancel"]')) close(); });
+  const pg = overlay.querySelector('#pg');
+  if (pg) for (const img of images) {
+    const el = document.createElement('img');
+    el.src = Store.imageURL(img); el.loading = 'lazy';
+    el.addEventListener('click', () => {
+      const marker = `{{img:${img.id}}}`;
+      const s = textarea.selectionStart ?? textarea.value.length;
+      textarea.value = textarea.value.slice(0, s) + '\n' + marker + '\n' + textarea.value.slice(s);
+      onInsert && onInsert();
+      DS.toast('画像を挿入しました'); close();
+    });
+    pg.appendChild(el);
+  }
+}
+
+window.addEventListener('hashchange', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>
