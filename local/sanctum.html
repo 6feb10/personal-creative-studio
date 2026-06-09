@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sanctum — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+<a href="#edit" class="fab" id="fab">＋</a>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script>
+const STORE = 'bookmarks', ICON = '🔖';
+const app = document.getElementById('app');
+const parseTags = (s) => [...new Set(String(s||'').split(/[,、\s]+/).map(t=>t.trim()).filter(Boolean))];
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  document.getElementById('fab').style.display = mode === 'edit' ? 'none' : '';
+  if (mode === 'edit') return renderEdit(id);
+  return renderList();
+}
+
+async function renderList() {
+  const rows = Store.byCreatedDesc(await DB.all(STORE));
+  const params = new URLSearchParams(location.search);
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  if (rows.length === 0) {
+    app.innerHTML = `<h1 class="page-title">ブックマーク</h1><p class="page-subtitle">Sanctum</p>
+      <div class="empty"><div class="empty-icon">🔖</div><p class="empty-text">まだブックマークがありません。<br>最初の一件を、ここに。</p></div>`;
+    return;
+  }
+  const tags = Store.collectTags(rows);
+  const active = params.get('tag') || '';
+  const filtered = active ? rows.filter(r => (r.tags||[]).includes(active)) : rows;
+  app.innerHTML = `
+    <h1 class="page-title">ブックマーク</h1><p class="page-subtitle">Sanctum · ${rows.length}</p>
+    ${tags.length ? `<div class="filters">
+      <a class="filter-chip ${!active?'active':''}" href="?">すべて</a>
+      ${tags.map(t=>`<a class="filter-chip ${active===t?'active':''}" href="?tag=${encodeURIComponent(t)}">${DS.esc(t)}</a>`).join('')}
+    </div>` : ''}
+    <div id="cards"></div>`;
+  const wrap = document.getElementById('cards');
+  for (const b of filtered) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="flex-between"><div class="card-title">${DS.esc(b.title || b.url)}</div></div>
+      ${b.url ? `<div class="card-meta"><a href="${DS.esc(b.url)}" target="_blank" rel="noopener" style="color:var(--orchid);text-decoration:none;">🔗 ${DS.esc(b.url)}</a></div>` : ''}
+      ${b.description ? `<div class="card-excerpt">${DS.esc(b.description)}</div>` : ''}
+      ${(b.tags||[]).length ? `<div class="card-tags">${b.tags.map(t=>`<span class="tag">${DS.esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="flex-between" style="margin-top:0.7rem;"><a class="btn btn-sm" href="#edit/${b.id}">編集</a></div>`;
+    wrap.appendChild(card);
+  }
+}
+
+async function renderEdit(id) {
+  const b = id ? await DB.get(STORE, id) : null;
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  app.innerHTML = `
+    <h1 class="page-title">${b ? 'ブックマークを編集' : '新しいブックマーク'}</h1>
+    <form id="f" class="mt-3">
+      <div class="form-group"><label class="form-label">URL</label><input class="form-input" name="url" inputmode="url" value="${DS.esc(b?.url||'')}" placeholder="https://..." required></div>
+      <div class="form-group"><label class="form-label">タイトル</label><input class="form-input" name="title" value="${DS.esc(b?.title||'')}"></div>
+      <div class="form-group"><label class="form-label">メモ</label><textarea class="form-textarea" name="description" style="min-height:90px;">${DS.esc(b?.description||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">タグ</label><input class="form-input" name="tags" value="${DS.esc((b?.tags||[]).join(', '))}" placeholder="例: 参考, ツール"></div>
+      <button type="submit" class="btn btn-primary btn-block">${b ? '保存' : '追加'}</button>
+      ${b ? `<button type="button" class="btn btn-danger btn-block mt-2" id="del">削除</button>` : ''}
+    </form>`;
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rec = b || {};
+    rec.url = fd.get('url').trim();
+    rec.title = fd.get('title').trim();
+    rec.description = fd.get('description').trim();
+    rec.tags = parseTags(fd.get('tags'));
+    if (b) await DB.update(STORE, rec); else await DB.add(STORE, rec);
+    DS.flash(b ? '保存しました' : '追加しました');
+    location.hash = '';
+  });
+  document.getElementById('del')?.addEventListener('click', async () => {
+    if (!await DS.confirmDialog('このブックマークを削除しますか？')) return;
+    await DB.del(STORE, b.id); DS.flash('削除しました'); location.hash = '';
+  });
+}
+
+window.addEventListener('hashchange', route);
+window.addEventListener('popstate', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>

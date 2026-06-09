@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Memoria — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+.chk-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chk { font-size: 0.78rem; padding: 0.35rem 0.7rem; border: 1px solid rgba(124,92,255,0.22); border-radius: 20px; cursor: pointer; }
+.chk input { display: none; }
+.chk.on { background: rgba(124,92,255,0.15); border-color: var(--orchid); color: var(--orchid); }
+.rep-row { display: flex; gap: 0.4rem; margin-bottom: 0.4rem; }
+.proj-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+<a href="#edit" class="fab" id="fab">＋</a>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script>
+const STORE = 'projects', ICON = '📚';
+const app = document.getElementById('app');
+const COLORS = ['#7c5cff','#ff7eb6','#f59e7a','#4ec9b0','#f0a020','#5b9bff'];
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  document.getElementById('fab').style.display = (mode === 'edit' || mode === 'view') ? 'none' : '';
+  if (mode === 'edit') return renderEdit(id);
+  if (mode === 'view') return renderView(id);
+  return renderList();
+}
+
+async function renderList() {
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  const rows = Store.byUpdatedDesc(await DB.all(STORE));
+  if (rows.length === 0) {
+    app.innerHTML = `<h1 class="page-title">プロジェクト</h1><p class="page-subtitle">Memoria</p>
+      <div class="empty"><div class="empty-icon">📚</div><p class="empty-text">まだプロジェクトがありません。<br>最初の企画を、ここに。</p></div>`;
+    return;
+  }
+  app.innerHTML = `<h1 class="page-title">プロジェクト</h1><p class="page-subtitle">Memoria · ${rows.length}</p><div id="cards"></div>`;
+  const wrap = document.getElementById('cards');
+  for (const p of rows) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<a href="#view/${p.id}">
+      <div class="flex-between"><div class="card-title"><span class="proj-dot" style="background:${DS.esc(p.color||'#7c5cff')}"></span> ${DS.esc(p.name)}</div></div>
+      ${p.description ? `<div class="card-excerpt">${DS.esc(DS.excerpt(p.description, 80))}</div>` : ''}</a>`;
+    wrap.appendChild(card);
+  }
+}
+
+async function renderView(id) {
+  const p = await DB.get(STORE, id);
+  if (!p) { location.hash = ''; return; }
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  const [bases, residents, novels] = await Promise.all([DB.all('bases'), DB.all('residents'), DB.all('novels')]);
+  const baseNames = (p.baseIds||[]).map(i => bases.find(b=>b.id===i)?.name).filter(Boolean);
+  const resNames = (p.residentIds||[]).map(i => residents.find(r=>r.id===i)?.name).filter(Boolean);
+  const linkedNovels = novels.filter(n => n.projectId === p.id);
+  const sect = (title, html) => html ? `<div class="detail-heading mt-3" style="font-family:'M PLUS Rounded 1c',sans-serif;font-weight:700;color:var(--pearl);margin-bottom:0.4rem;">${title}</div>${html}` : '';
+  app.innerHTML = `
+    <h1 class="page-title"><span class="proj-dot" style="background:${DS.esc(p.color||'#7c5cff')}"></span> ${DS.esc(p.name)}</h1>
+    <a class="btn btn-sm mt-2" href="#edit/${p.id}">編集</a>
+    ${sect('説明', p.description ? `<p class="card-excerpt">${DS.esc(p.description).replace(/\n/g,'<br>')}</p>` : '')}
+    ${sect('AIへのカスタム指示', p.customInstructions ? `<div class="card"><div class="card-excerpt">${DS.esc(p.customInstructions).replace(/\n/g,'<br>')}</div></div>` : '')}
+    ${sect('ナレッジ', p.knowledge ? `<div class="card"><div class="card-excerpt">${DS.esc(p.knowledge).replace(/\n/g,'<br>')}</div></div>` : '')}
+    ${sect('リンク', (p.links||[]).length ? `<div class="card-tags">${p.links.map(l=>`<a class="tag" href="${DS.esc(l.url)}" target="_blank" rel="noopener">🔗 ${DS.esc(l.label||l.url)}</a>`).join('')}</div>` : '')}
+    ${sect('ペルソナ', (p.personas||[]).length ? p.personas.map(pe=>`<div class="card"><div class="card-title">${DS.esc(pe.name)}</div><div class="card-excerpt">${DS.esc(pe.description||'')}</div></div>`).join('') : '')}
+    ${sect('紐づくキャラ・拠点', (baseNames.length||resNames.length) ? `<div class="card-tags">${baseNames.map(n=>`<span class="tag">🏠 ${DS.esc(n)}</span>`).join('')}${resNames.map(n=>`<span class="tag">👤 ${DS.esc(n)}</span>`).join('')}</div>` : '')}
+    ${sect('このプロジェクトの物語', linkedNovels.length ? linkedNovels.map(n=>`<div class="card"><a href="desire.html#view/${n.id}"><div class="card-title">${DS.esc(n.title||'無題')}</div></a></div>`).join('') : '')}`;
+}
+
+async function renderEdit(id) {
+  const p = id ? await DB.get(STORE, id) : null;
+  const [bases, residents] = await Promise.all([Store.byName(await DB.all('bases')), Store.byName(await DB.all('residents'))]);
+  document.getElementById('header').innerHTML = DS.pageHeader(id ? `#view/${id}` : '#', '戻る', ICON);
+  const selBases = new Set(p?.baseIds||[]), selRes = new Set(p?.residentIds||[]);
+  app.innerHTML = `
+    <h1 class="page-title">${p ? 'プロジェクトを編集' : '新しいプロジェクト'}</h1>
+    <form id="f" class="mt-3">
+      <div class="form-group"><label class="form-label">名前</label><input class="form-input" name="name" value="${DS.esc(p?.name||'')}" required></div>
+      <div class="form-group"><label class="form-label">テーマカラー</label><div class="chk-list" id="colors">
+        ${COLORS.map(c=>`<span class="chk ${(p?.color||COLORS[0])===c?'on':''}" data-color="${c}" style="background:${c};width:28px;height:28px;border-radius:50%;padding:0;"></span>`).join('')}
+      </div><input type="hidden" name="color" id="colorVal" value="${DS.esc(p?.color||COLORS[0])}"></div>
+      <div class="form-group"><label class="form-label">説明</label><textarea class="form-textarea" name="description" style="min-height:80px;">${DS.esc(p?.description||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">AIへのカスタム指示</label><textarea class="form-textarea" name="customInstructions" style="min-height:100px;" placeholder="生成時に毎回先頭へ付与されます">${DS.esc(p?.customInstructions||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">ナレッジ</label><textarea class="form-textarea" name="knowledge" style="min-height:100px;">${DS.esc(p?.knowledge||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">リンク</label><div id="links"></div><button type="button" class="btn btn-sm" id="addLink">＋ リンク追加</button></div>
+      <div class="form-group"><label class="form-label">ペルソナ</label><div id="personas"></div><button type="button" class="btn btn-sm" id="addPersona">＋ ペルソナ追加</button></div>
+      ${bases.length ? `<div class="form-group"><label class="form-label">紐づく拠点</label><div class="chk-list" id="baseChks">
+        ${bases.map(b=>`<label class="chk ${selBases.has(b.id)?'on':''}"><input type="checkbox" value="${b.id}" ${selBases.has(b.id)?'checked':''}>🏠 ${DS.esc(b.name)}</label>`).join('')}</div></div>` : ''}
+      ${residents.length ? `<div class="form-group"><label class="form-label">紐づくキャラ</label><div class="chk-list" id="resChks">
+        ${residents.map(r=>`<label class="chk ${selRes.has(r.id)?'on':''}"><input type="checkbox" value="${r.id}" ${selRes.has(r.id)?'checked':''}>👤 ${DS.esc(r.name)}</label>`).join('')}</div></div>` : ''}
+      <button type="submit" class="btn btn-primary btn-block">${p ? '保存' : '作成'}</button>
+      ${p ? `<button type="button" class="btn btn-danger btn-block mt-2" id="del">削除</button>` : ''}
+    </form>`;
+
+  // color picker
+  app.querySelector('#colors').addEventListener('click', (e) => {
+    const sw = e.target.closest('[data-color]'); if (!sw) return;
+    app.querySelectorAll('#colors .chk').forEach(c=>c.classList.remove('on'));
+    sw.classList.add('on'); document.getElementById('colorVal').value = sw.dataset.color;
+  });
+  // checkbox toggle styling
+  app.querySelectorAll('.chk input[type=checkbox]').forEach(cb => cb.addEventListener('change', () => cb.closest('.chk').classList.toggle('on', cb.checked)));
+
+  // repeatable links
+  const linksWrap = document.getElementById('links');
+  const addLink = (l={}) => { const d=document.createElement('div'); d.className='rep-row';
+    d.innerHTML=`<input class="form-input lk-label" placeholder="ラベル" value="${DS.esc(l.label||'')}" style="flex:1;"><input class="form-input lk-url" placeholder="https://" value="${DS.esc(l.url||'')}" style="flex:2;"><button type="button" class="btn btn-sm" data-rm>×</button>`;
+    d.querySelector('[data-rm]').onclick=()=>d.remove(); linksWrap.appendChild(d); };
+  (p?.links||[]).forEach(addLink);
+  document.getElementById('addLink').onclick = () => addLink();
+
+  // repeatable personas
+  const persWrap = document.getElementById('personas');
+  const addPersona = (pe={}) => { const d=document.createElement('div'); d.className='rep-row';
+    d.innerHTML=`<input class="form-input ps-name" placeholder="名前" value="${DS.esc(pe.name||'')}" style="flex:1;"><input class="form-input ps-desc" placeholder="説明" value="${DS.esc(pe.description||'')}" style="flex:2;"><button type="button" class="btn btn-sm" data-rm>×</button>`;
+    d.querySelector('[data-rm]').onclick=()=>d.remove(); persWrap.appendChild(d); };
+  (p?.personas||[]).forEach(addPersona);
+  document.getElementById('addPersona').onclick = () => addPersona();
+
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rec = p || {};
+    rec.name = fd.get('name').trim();
+    rec.color = fd.get('color');
+    rec.description = fd.get('description').trim();
+    rec.customInstructions = fd.get('customInstructions').trim();
+    rec.knowledge = fd.get('knowledge').trim();
+    rec.links = [...linksWrap.querySelectorAll('.rep-row')].map(r=>({label:r.querySelector('.lk-label').value.trim(), url:r.querySelector('.lk-url').value.trim()})).filter(l=>l.url);
+    rec.personas = [...persWrap.querySelectorAll('.rep-row')].map(r=>({name:r.querySelector('.ps-name').value.trim(), description:r.querySelector('.ps-desc').value.trim()})).filter(x=>x.name);
+    rec.baseIds = [...app.querySelectorAll('#baseChks input:checked')].map(c=>Number(c.value));
+    rec.residentIds = [...app.querySelectorAll('#resChks input:checked')].map(c=>Number(c.value));
+    let nid;
+    if (p) { await DB.update(STORE, rec); nid = p.id; } else { nid = await DB.add(STORE, rec); }
+    DS.flash(p ? '保存しました' : '作成しました');
+    location.hash = 'view/' + nid;
+  });
+  document.getElementById('del')?.addEventListener('click', async () => {
+    if (!await DS.confirmDialog('このプロジェクトを削除しますか？')) return;
+    await DB.del(STORE, p.id); DS.flash('削除しました'); location.hash = '';
+  });
+}
+
+window.addEventListener('hashchange', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>
