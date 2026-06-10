@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Spark — DreamStudio</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-title" content="DreamStudio">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  /* ── Spark 専用の小物（既存テーマのトークンを流用） ── */
+  .quick { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 0.9rem; margin-bottom: 1.1rem; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 2px 14px rgba(124,92,255,0.06); }
+  .quick textarea { width: 100%; border: none; background: transparent; resize: none; outline: none; font-family: inherit; font-size: 0.95rem; color: var(--pearl); line-height: 1.7; min-height: 2.6rem; }
+  .quick textarea::placeholder { color: rgba(58,47,74,0.4); }
+  .quick-bar { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; }
+  .catpills { display: flex; gap: 0.35rem; flex: 1; flex-wrap: wrap; }
+  .catpill { font-family: 'M PLUS Rounded 1c', sans-serif; font-size: 0.72rem; padding: 0.3rem 0.7rem; border-radius: 999px; border: 1px solid var(--card-border); background: transparent; color: rgba(58,47,74,0.6); cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+  .catpill.on { color: #fff; border-color: transparent; }
+  .catpill.on[data-cat="memo"]  { background: var(--orchid); }
+  .catpill.on[data-cat="task"]  { background: var(--blush); }
+  .catpill.on[data-cat="later"] { background: var(--rose-gold); }
+  .quick-add { flex-shrink: 0; width: 2.2rem; height: 2.2rem; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--orchid), var(--blush)); color: #fff; font-size: 1.2rem; line-height: 1; cursor: pointer; box-shadow: 0 3px 10px rgba(124,92,255,0.25); transition: transform 0.15s, opacity 0.2s; }
+  .quick-add:active { transform: scale(0.92); }
+  .quick-add:disabled { opacity: 0.35; box-shadow: none; }
+
+  .n-card { position: relative; padding-left: 1.1rem; }
+  .n-card::before { content: ''; position: absolute; left: 0; top: 0.9rem; bottom: 0.9rem; width: 3px; border-radius: 3px; }
+  .n-card[data-cat="memo"]::before  { background: var(--orchid); }
+  .n-card[data-cat="task"]::before  { background: var(--blush); }
+  .n-card[data-cat="later"]::before { background: var(--rose-gold); }
+  .n-top { display: flex; align-items: flex-start; gap: 0.6rem; }
+  .n-check { flex-shrink: 0; width: 1.35rem; height: 1.35rem; margin-top: 0.1rem; border-radius: 50%; border: 1.5px solid rgba(255,126,182,0.5); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.8rem; transition: all 0.2s; padding: 0; }
+  .n-check.done { background: var(--blush); border-color: var(--blush); }
+  .n-body { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; line-height: 1.7; color: var(--pearl); font-size: 0.92rem; }
+  .n-body.done { text-decoration: line-through; opacity: 0.45; }
+  .n-cattag { font-size: 0.62rem; letter-spacing: 0.05em; padding: 0.1rem 0.5rem; border-radius: 999px; }
+  .n-cattag[data-cat="memo"]  { background: rgba(124,92,255,0.1); color: var(--orchid); }
+  .n-cattag[data-cat="task"]  { background: rgba(255,126,182,0.12); color: var(--blush); }
+  .n-cattag[data-cat="later"] { background: rgba(245,158,122,0.14); color: var(--rose-gold); }
+  .n-due { font-size: 0.68rem; color: var(--rose-gold); }
+  .n-due.over { color: var(--ember); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="cosmos"></div>
+<div class="page" style="padding-top: var(--safe-top);">
+  <div id="header"></div>
+  <div id="app"></div>
+</div>
+<a href="#edit" class="fab" id="fab">＋</a>
+
+<script src="js/db.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/store.js"></script>
+<script>
+const STORE = 'notes', ICON = '💡';
+const app = document.getElementById('app');
+const parseTags = (s) => [...new Set(String(s||'').split(/[,、\s]+/).map(t=>t.trim()).filter(Boolean))];
+
+const CATS = {
+  memo:  { label: 'メモ',   icon: '✏️' },
+  task:  { label: 'タスク', icon: '✓'  },
+  later: { label: 'あとで', icon: '⏳' },
+};
+const CAT_ORDER = ['memo', 'task', 'later'];
+let quickCat = 'memo'; // クイック入力で選択中のカテゴリ
+
+function isOverdue(rec) {
+  return rec.cat === 'task' && !rec.done && rec.deadline && rec.deadline < todayStr();
+}
+function todayStr() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+
+async function route() {
+  const [mode, id] = location.hash.slice(1).split('/');
+  document.getElementById('fab').style.display = mode === 'edit' ? 'none' : '';
+  if (mode === 'edit') return renderEdit(id);
+  return renderList();
+}
+
+async function renderList() {
+  const all = Store.byCreatedDesc(await DB.all(STORE));
+  const params = new URLSearchParams(location.search);
+  const active = params.get('cat') || '';
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+
+  // タスクは未完了→完了の順、それ以外は新しい順
+  const sortNotes = (rows) => {
+    const tasks = rows.filter(r => r.cat === 'task');
+    const others = rows.filter(r => r.cat !== 'task');
+    tasks.sort((a, b) => (a.done?1:0) - (b.done?1:0) || (b.createdAt||0) - (a.createdAt||0));
+    return active === 'task' ? tasks : [...others, ...tasks].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  };
+
+  const counts = { memo:0, task:0, later:0 };
+  for (const r of all) if (counts[r.cat] != null) counts[r.cat]++;
+  const filtered = sortNotes(active ? all.filter(r => r.cat === active) : all);
+
+  app.innerHTML = `
+    <h1 class="page-title">走り書き</h1><p class="page-subtitle">Spark · ${all.length}</p>
+
+    <div class="quick">
+      <textarea id="q-text" rows="1" placeholder="ふと思いついたこと、やること、あとで見たいもの…"></textarea>
+      <div class="quick-bar">
+        <div class="catpills" id="q-cats">
+          ${CAT_ORDER.map(c => `<button type="button" class="catpill ${c===quickCat?'on':''}" data-cat="${c}">${CATS[c].icon} ${CATS[c].label}</button>`).join('')}
+        </div>
+        <button class="quick-add" id="q-add" disabled>＋</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <a class="filter-chip ${!active?'active':''}" href="?">すべて</a>
+      ${CAT_ORDER.map(c => `<a class="filter-chip ${active===c?'active':''}" href="?cat=${c}">${CATS[c].icon} ${CATS[c].label} ${counts[c]||0}</a>`).join('')}
+    </div>
+
+    ${filtered.length ? `<div id="cards"></div>` : `
+      <div class="empty"><div class="empty-icon">💡</div><p class="empty-text">${active?'このカテゴリはまだ空です。':'まだ何もありません。<br>上の欄に、ひとこと走り書きを。'}</p></div>`}
+  `;
+
+  wireQuickAdd();
+
+  const wrap = document.getElementById('cards');
+  if (!wrap) return;
+  for (const n of filtered) wrap.appendChild(noteCard(n));
+}
+
+function noteCard(n) {
+  const card = document.createElement('div');
+  card.className = 'card n-card';
+  card.dataset.cat = n.cat;
+  const due = n.deadline ? `<span class="n-due ${isOverdue(n)?'over':''}">⏰ ${DS.esc(n.deadline)}</span>` : '';
+  const url = n.url ? `<a href="${DS.esc(n.url)}" target="_blank" rel="noopener" style="color:var(--rose-gold);text-decoration:none;font-size:0.78rem;">🔗 ${DS.esc(n.url)}</a>` : '';
+  const title = n.title ? `<div class="card-title" style="margin-bottom:0.2rem;">${DS.esc(n.title)}</div>` : '';
+  card.innerHTML = `
+    <div class="n-top">
+      ${n.cat==='task' ? `<button class="n-check ${n.done?'done':''}" data-toggle="${n.id}" aria-label="完了切り替え">${n.done?'✓':''}</button>` : ''}
+      <div class="n-body ${n.cat==='task'&&n.done?'done':''}">${title}${DS.esc(n.body||'')}</div>
+    </div>
+    <div class="card-meta" style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-top:0.5rem;">
+      <span class="n-cattag" data-cat="${n.cat}">${CATS[n.cat]?.label||n.cat}</span>
+      ${due}${url}
+      <span style="font-size:0.68rem;color:rgba(58,47,74,0.4);">${DS.fmtDate(n.createdAt)}</span>
+    </div>
+    ${(n.tags||[]).length ? `<div class="card-tags">${n.tags.map(t=>`<span class="tag">${DS.esc(t)}</span>`).join('')}</div>` : ''}
+    <div class="flex-between" style="margin-top:0.6rem;"><a class="btn btn-sm" href="#edit/${n.id}">編集</a></div>`;
+  card.querySelector('[data-toggle]')?.addEventListener('click', async () => {
+    const rec = await DB.get(STORE, n.id);
+    rec.done = !rec.done;
+    await DB.update(STORE, rec);
+    renderList();
+  });
+  return card;
+}
+
+function wireQuickAdd() {
+  const ta = document.getElementById('q-text');
+  const add = document.getElementById('q-add');
+  if (!ta) return;
+  const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; add.disabled = ta.value.trim() === ''; };
+  ta.addEventListener('input', grow);
+  ta.addEventListener('keydown', (e) => { if ((e.metaKey||e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); doQuickAdd(); } });
+  document.getElementById('q-cats').addEventListener('click', (e) => {
+    const btn = e.target.closest('.catpill'); if (!btn) return;
+    quickCat = btn.dataset.cat;
+    DS.qsa('.catpill', document.getElementById('q-cats')).forEach(b => b.classList.toggle('on', b.dataset.cat === quickCat));
+  });
+  add.addEventListener('click', doQuickAdd);
+}
+
+async function doQuickAdd() {
+  const ta = document.getElementById('q-text');
+  const body = ta.value.trim();
+  if (!body) return;
+  await DB.add(STORE, { cat: quickCat, body, title: '', tags: [], done: false });
+  DS.toast('追加しました');
+  ta.value = '';
+  renderList();
+}
+
+async function renderEdit(id) {
+  const n = id ? await DB.get(STORE, id) : null;
+  const cat = n?.cat || quickCat || 'memo';
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  app.innerHTML = `
+    <h1 class="page-title">${n ? '走り書きを編集' : '新しい走り書き'}</h1>
+    <form id="f" class="mt-3">
+      <div class="form-group">
+        <label class="form-label">種類</label>
+        <div class="catpills" id="e-cats">
+          ${CAT_ORDER.map(c => `<button type="button" class="catpill ${c===cat?'on':''}" data-cat="${c}">${CATS[c].icon} ${CATS[c].label}</button>`).join('')}
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">タイトル <span style="opacity:0.5;">（任意）</span></label><input class="form-input" name="title" value="${DS.esc(n?.title||'')}"></div>
+      <div class="form-group"><label class="form-label">内容</label><textarea class="form-textarea" name="body" style="min-height:120px;" required>${DS.esc(n?.body||'')}</textarea></div>
+      <div class="form-group" id="g-deadline" style="display:none;"><label class="form-label">締切 <span style="opacity:0.5;">（任意）</span></label><input class="form-input" type="date" name="deadline" value="${DS.esc(n?.deadline||'')}"></div>
+      <div class="form-group" id="g-url" style="display:none;"><label class="form-label">URL <span style="opacity:0.5;">（任意）</span></label><input class="form-input" name="url" inputmode="url" value="${DS.esc(n?.url||'')}" placeholder="https://..."></div>
+      <div class="form-group"><label class="form-label">タグ <span style="opacity:0.5;">（任意）</span></label><input class="form-input" name="tags" value="${DS.esc((n?.tags||[]).join(', '))}" placeholder="例: 案, プロット"></div>
+      <input type="hidden" name="cat" value="${cat}">
+      <button type="submit" class="btn btn-primary btn-block">${n ? '保存' : '追加'}</button>
+      ${n ? `<button type="button" class="btn btn-danger btn-block mt-2" id="del">削除</button>` : ''}
+    </form>`;
+
+  const form = document.getElementById('f');
+  const syncCatUI = (c) => {
+    form.cat.value = c;
+    DS.qsa('.catpill', document.getElementById('e-cats')).forEach(b => b.classList.toggle('on', b.dataset.cat === c));
+    document.getElementById('g-deadline').style.display = c === 'task' ? '' : 'none';
+    document.getElementById('g-url').style.display = c === 'later' ? '' : 'none';
+  };
+  syncCatUI(cat);
+  document.getElementById('e-cats').addEventListener('click', (e) => {
+    const btn = e.target.closest('.catpill'); if (btn) syncCatUI(btn.dataset.cat);
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rec = n || {};
+    rec.cat = fd.get('cat');
+    rec.title = fd.get('title').trim();
+    rec.body = fd.get('body').trim();
+    rec.tags = parseTags(fd.get('tags'));
+    rec.deadline = rec.cat === 'task' ? (fd.get('deadline') || '') : '';
+    rec.url = rec.cat === 'later' ? (fd.get('url').trim()) : '';
+    if (rec.cat !== 'task') rec.done = false;
+    else if (rec.done == null) rec.done = false;
+    if (n) await DB.update(STORE, rec); else await DB.add(STORE, rec);
+    DS.flash(n ? '保存しました' : '追加しました');
+    location.hash = '';
+  });
+  document.getElementById('del')?.addEventListener('click', async () => {
+    if (!await DS.confirmDialog('この走り書きを削除しますか？')) return;
+    await DB.del(STORE, n.id); DS.flash('削除しました'); location.hash = '';
+  });
+}
+
+window.addEventListener('hashchange', route);
+window.addEventListener('popstate', route);
+(async () => { await DS.appInit(); route(); })();
+</script>
+</body>
+</html>

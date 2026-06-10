@@ -3,7 +3,7 @@
 //  サーバー不要。すべてのデータはこの端末のブラウザ内に保存されます。
 // ═══════════════════════════════════════════════
 const DB_NAME = 'dreamstudio';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // オブジェクトストア（id 自動採番）。settings のみ key-value。
 const STORES = [
@@ -11,6 +11,7 @@ const STORES = [
   'images', 'imageFolders',
   'bookmarks', 'bookmarkFolders',
   'projects',
+  'notes',
   'apiProviders', 'forgeTemplates', 'forgeGenerations',
 ];
 

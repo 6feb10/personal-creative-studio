@@ -1,14 +1,14 @@
 // ═══════════════════════════════════════════════
 //  DreamStudio Local — Service Worker (offline-first)
 // ═══════════════════════════════════════════════
-const CACHE = 'dreamstudio-local-v2';
+const CACHE = 'dreamstudio-local-v3';
 
 const ASSETS = [
   './',
   './index.html',
   './cradle.html', './forge.html', './desire.html', './reverie.html',
   './memoria.html', './sanctum.html', './chat.html', './illustrate.html',
-  './settings.html',
+  './spark.html', './settings.html',
   './css/style.css',
   './js/db.js', './js/ui.js', './js/store.js', './js/ai.js', './js/backup.js',
   './manifest.json',
