@@ -65,6 +65,9 @@
     <a href="sanctum.html" class="gate gate--sanctum"><span class="gate-icon">🔖</span>
       <div class="gate-info"><div class="gate-name">Sanctum</div><div class="gate-desc">ブックマーク — 資料の棚</div></div>
       <span class="gate-count" id="c-sanctum"></span><span class="gate-arrow">›</span></a>
+    <a href="spark.html" class="gate gate--spark"><span class="gate-icon">💡</span>
+      <div class="gate-info"><div class="gate-name">Spark</div><div class="gate-desc">走り書き — メモ・タスク・あとで</div></div>
+      <span class="gate-count" id="c-spark"></span><span class="gate-arrow">›</span></a>
   </nav>
 
   <div class="settings-area"><a href="settings.html" class="settings-link">⚙ 設定・バックアップ・AIキー</a></div>
@@ -77,9 +80,10 @@
 (async () => {
   await DS.appInit();
   const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
-  const [bases, residents, novels, images, projects, bookmarks, gens] = await Promise.all([
+  const [bases, residents, novels, images, projects, bookmarks, gens, notes] = await Promise.all([
     DB.count('bases'), DB.count('residents'), DB.count('novels'),
     DB.count('images'), DB.count('projects'), DB.count('bookmarks'), DB.count('forgeGenerations'),
+    DB.all('notes'),
   ]);
   set('c-cradle', `${bases}拠点 · ${residents}人`);
   set('c-forge', gens);
@@ -87,6 +91,8 @@
   set('c-reverie', images);
   set('c-memoria', projects);
   set('c-sanctum', bookmarks);
+  const openTasks = notes.filter(n => n.cat === 'task' && !n.done).length;
+  set('c-spark', openTasks ? `ToDo ${openTasks} · ${notes.length}` : `${notes.length}`);
 })();
 </script>
 </body>
