@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════
 //  DreamStudio Local — Service Worker (offline-first)
 // ═══════════════════════════════════════════════
-const CACHE = 'dreamstudio-local-v1';
+const CACHE = 'dreamstudio-local-v2';
 
 const ASSETS = [
   './',
