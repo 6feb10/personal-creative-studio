@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Forge — DreamStudio</title>
+<title>AI生成 — DreamStudio</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
@@ -50,10 +50,10 @@ async function route() {
 }
 
 async function renderMenu() {
-  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', ICON);
   const ready = await Store.providersReady();
   app.innerHTML = `
-    <h1 class="page-title">AI生成</h1><p class="page-subtitle">Forge</p>
+    <h1 class="page-title">AI生成</h1><p class="page-subtitle">物語のたねを書く</p>
     ${!ready.length ? `<div class="card"><div class="card-excerpt">⚠ AIキーが未設定です。生成・対話・挿絵を使うには、設定でAPIキーを追加してください。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>` : ''}
     <div class="card"><a href="#generate" class="forge-menu-item"><span style="font-size:1.4rem;">✍️</span><div><div class="card-title" style="margin:0;">物語を生成</div><div class="card-meta" style="margin:0;">設定を組み合わせてAIに書かせる</div></div></a></div>
     <div class="card"><a href="chat.html" class="forge-menu-item"><span style="font-size:1.4rem;">💬</span><div><div class="card-title" style="margin:0;">キャラと対話</div><div class="card-meta" style="margin:0;">キャラクターになりきって会話</div></div></a></div>
@@ -75,7 +75,7 @@ async function renderGenerate() {
     <form id="f" class="mt-3">
       <div class="form-group"><label class="form-label">AIプロバイダー</label><select class="form-select" id="provider">
         ${ready.map(p=>`<option value="${p.id}">${DS.esc(p.displayName||p.name)} (${DS.esc(p.model)})</option>`).join('')}</select></div>
-      ${projects.length?`<div class="form-group"><label class="form-label">プロジェクト</label><select class="form-select" id="project"><option value="">— なし —</option>${projects.map(p=>`<option value="${p.id}">${DS.esc(p.name)}</option>`).join('')}</select></div>`:''}
+      ${projects.length?`<div class="form-group"><label class="form-label">プロット</label><select class="form-select" id="project"><option value="">— なし —</option>${projects.map(p=>`<option value="${p.id}">${DS.esc(p.name)}</option>`).join('')}</select></div>`:''}
       ${bases.length?`<div class="mat-heading">拠点</div><div class="chk-list" id="bases">${bases.map(b=>`<label class="chk"><input type="checkbox" value="${b.id}">${DS.esc(b.name)}</label>`).join('')}</div>`:''}
       ${residents.length?`<div class="mat-heading">キャラクター</div><div class="chk-list" id="residents">${residents.map(r=>`<label class="chk"><input type="checkbox" value="${r.id}">${DS.esc(r.name)}</label>`).join('')}</div>`:''}
       ${templates.length?`<div class="mat-heading">テンプレート</div><div class="chk-list" id="templates">${templates.map(t=>`<label class="chk"><input type="checkbox" value="${t.id}">${DS.esc(t.name)}</label>`).join('')}</div>`:''}
@@ -109,7 +109,7 @@ async function renderGenerate() {
 
 async function buildSystem({ projectId, baseIds, residentIds, templateIds, prevContent, contMode }) {
   const parts = ['あなたは優れた小説家です。日本語で、指示された設定・条件に基づいて創作してください。\n'];
-  if (projectId) { const p = await DB.get('projects', projectId); if (p) { parts.push(`## プロジェクト: ${p.name}`); if (p.customInstructions) parts.push(`### カスタム指示\n${p.customInstructions}`); if (p.knowledge) parts.push(`### ナレッジ\n${p.knowledge}`); } }
+  if (projectId) { const p = await DB.get('projects', projectId); if (p) { parts.push(`## プロット: ${p.name}`); if (p.customInstructions) parts.push(`### カスタム指示\n${p.customInstructions}`); if (p.knowledge) parts.push(`### ナレッジ\n${p.knowledge}`); } }
   const allRes = await DB.all('residents');
   for (const bid of baseIds) { const b = await DB.get('bases', bid); if (b) { parts.push(`## 拠点: ${b.name}\n${b.description||''}`); const m = allRes.filter(r=>r.baseId===bid).map(r=>r.name); if (m.length) parts.push('所属キャラ: ' + m.join('、')); } }
   for (const rid of residentIds) {
@@ -194,7 +194,7 @@ async function renderUsage() {
   const byProv = {};
   for (const g of gens) { const p = g.provider||'?'; (byProv[p] ??= { n:0, cost:0 }); byProv[p].n++; byProv[p].cost += Number(g.costTotal)||0; }
   app.innerHTML = `
-    <h1 class="page-title">使用量</h1><p class="page-subtitle">Usage</p>
+    <h1 class="page-title">使用量</h1><p class="page-subtitle">AI利用状況</p>
     <div class="gen-stats">
       <div class="gen-stat"><div class="gen-stat-val">${gens.length}</div><div class="gen-stat-label">生成回数</div></div>
       <div class="gen-stat"><div class="gen-stat-val">$${sum('costTotal').toFixed(4)}</div><div class="gen-stat-label">合計コスト</div></div>

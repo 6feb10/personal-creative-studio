@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Reverie — DreamStudio</title>
+<title>ギャラリー — DreamStudio</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
@@ -49,10 +49,10 @@ async function route() {
 }
 
 async function renderList() {
-  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', ICON);
   const rows = Store.byCreatedDesc(await DB.all(STORE));
   if (rows.length === 0) {
-    app.innerHTML = `<h1 class="page-title">ギャラリー</h1><p class="page-subtitle">Reverie</p>
+    app.innerHTML = `<h1 class="page-title">ギャラリー</h1><p class="page-subtitle">画像の展示室</p>
       <div class="empty"><div class="empty-icon">🖼️</div><p class="empty-text">まだ画像がありません。<br>最初の一枚を、ここに。</p></div>`;
     return;
   }
@@ -60,7 +60,7 @@ async function renderList() {
   const active = new URLSearchParams(location.search).get('tag') || '';
   const filtered = active ? rows.filter(r => (r.tags||[]).includes(active)) : rows;
   app.innerHTML = `
-    <h1 class="page-title">ギャラリー</h1><p class="page-subtitle">Reverie · ${rows.length}</p>
+    <h1 class="page-title">ギャラリー</h1><p class="page-subtitle">画像の展示室 · ${rows.length}</p>
     ${tags.length ? `<div class="filters"><a class="filter-chip ${!active?'active':''}" href="?">すべて</a>
       ${tags.map(t=>`<a class="filter-chip ${active===t?'active':''}" href="?tag=${encodeURIComponent(t)}">${DS.esc(t)}</a>`).join('')}</div>` : ''}
     <div class="gallery-grid" id="grid"></div>`;

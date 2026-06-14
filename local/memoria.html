@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Memoria — DreamStudio</title>
+<title>プロット — DreamStudio</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
@@ -44,14 +44,14 @@ async function route() {
 }
 
 async function renderList() {
-  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', ICON);
   const rows = Store.byUpdatedDesc(await DB.all(STORE));
   if (rows.length === 0) {
-    app.innerHTML = `<h1 class="page-title">プロジェクト</h1><p class="page-subtitle">Memoria</p>
-      <div class="empty"><div class="empty-icon">📚</div><p class="empty-text">まだプロジェクトがありません。<br>最初の企画を、ここに。</p></div>`;
+    app.innerHTML = `<h1 class="page-title">プロット</h1><p class="page-subtitle">物語の設定・ナレッジ</p>
+      <div class="empty"><div class="empty-icon">📚</div><p class="empty-text">まだプロットがありません。<br>最初のひとつを、ここに。</p></div>`;
     return;
   }
-  app.innerHTML = `<h1 class="page-title">プロジェクト</h1><p class="page-subtitle">Memoria · ${rows.length}</p><div id="cards"></div>`;
+  app.innerHTML = `<h1 class="page-title">プロット</h1><p class="page-subtitle">物語の設定・ナレッジ · ${rows.length}</p><div id="cards"></div>`;
   const wrap = document.getElementById('cards');
   for (const p of rows) {
     const card = document.createElement('div');
@@ -81,7 +81,7 @@ async function renderView(id) {
     ${sect('リンク', (p.links||[]).length ? `<div class="card-tags">${p.links.map(l=>`<a class="tag" href="${DS.esc(l.url)}" target="_blank" rel="noopener">🔗 ${DS.esc(l.label||l.url)}</a>`).join('')}</div>` : '')}
     ${sect('ペルソナ', (p.personas||[]).length ? p.personas.map(pe=>`<div class="card"><div class="card-title">${DS.esc(pe.name)}</div><div class="card-excerpt">${DS.esc(pe.description||'')}</div></div>`).join('') : '')}
     ${sect('紐づくキャラ・拠点', (baseNames.length||resNames.length) ? `<div class="card-tags">${baseNames.map(n=>`<span class="tag">🏠 ${DS.esc(n)}</span>`).join('')}${resNames.map(n=>`<span class="tag">👤 ${DS.esc(n)}</span>`).join('')}</div>` : '')}
-    ${sect('このプロジェクトの物語', linkedNovels.length ? linkedNovels.map(n=>`<div class="card"><a href="desire.html#view/${n.id}"><div class="card-title">${DS.esc(n.title||'無題')}</div></a></div>`).join('') : '')}`;
+    ${sect('このプロットの物語', linkedNovels.length ? linkedNovels.map(n=>`<div class="card"><a href="desire.html#view/${n.id}"><div class="card-title">${DS.esc(n.title||'無題')}</div></a></div>`).join('') : '')}`;
 }
 
 async function renderEdit(id) {
@@ -90,7 +90,7 @@ async function renderEdit(id) {
   document.getElementById('header').innerHTML = DS.pageHeader(id ? `#view/${id}` : '#', '戻る', ICON);
   const selBases = new Set(p?.baseIds||[]), selRes = new Set(p?.residentIds||[]);
   app.innerHTML = `
-    <h1 class="page-title">${p ? 'プロジェクトを編集' : '新しいプロジェクト'}</h1>
+    <h1 class="page-title">${p ? 'プロットを編集' : '新しいプロット'}</h1>
     <form id="f" class="mt-3">
       <div class="form-group"><label class="form-label">名前</label><input class="form-input" name="name" value="${DS.esc(p?.name||'')}" required></div>
       <div class="form-group"><label class="form-label">テーマカラー</label><div class="chk-list" id="colors">
@@ -153,7 +153,7 @@ async function renderEdit(id) {
     location.hash = 'view/' + nid;
   });
   document.getElementById('del')?.addEventListener('click', async () => {
-    if (!await DS.confirmDialog('このプロジェクトを削除しますか？')) return;
+    if (!await DS.confirmDialog('このプロットを削除しますか？')) return;
     await DB.del(STORE, p.id); DS.flash('削除しました'); location.hash = '';
   });
 }

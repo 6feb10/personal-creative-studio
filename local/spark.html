@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Spark — DreamStudio</title>
+<title>メモ — DreamStudio</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
@@ -87,7 +87,7 @@ async function renderList() {
   const all = Store.byCreatedDesc(await DB.all(STORE));
   const params = new URLSearchParams(location.search);
   const active = params.get('cat') || '';
-  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', ICON);
 
   // タスクは未完了→完了の順、それ以外は新しい順
   const sortNotes = (rows) => {
@@ -102,7 +102,7 @@ async function renderList() {
   const filtered = sortNotes(active ? all.filter(r => r.cat === active) : all);
 
   app.innerHTML = `
-    <h1 class="page-title">走り書き</h1><p class="page-subtitle">Spark · ${all.length}</p>
+    <h1 class="page-title">走り書き</h1><p class="page-subtitle">メモ・タスク・あとで · ${all.length}</p>
 
     <div class="quick">
       <textarea id="q-text" rows="1" placeholder="ふと思いついたこと、やること、あとで見たいもの…"></textarea>
