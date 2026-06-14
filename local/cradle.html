@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Cradle — DreamStudio</title>
+<title>キャラクター — DreamStudio</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
@@ -53,10 +53,10 @@ async function route() {
 }
 
 async function renderList() {
-  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', ICON);
   const [bases, residents] = await Promise.all([Store.byName(await DB.all('bases')), Store.byName(await DB.all('residents'))]);
   app.innerHTML = `
-    <h1 class="page-title">世界設計</h1><p class="page-subtitle">Cradle</p>
+    <h1 class="page-title">世界設計</h1><p class="page-subtitle">拠点とキャラクター</p>
     <div class="flex-between detail-heading">拠点 <a class="btn btn-sm" href="#base">＋ 拠点</a></div>
     <div id="bases"></div>
     <div class="flex-between detail-heading">キャラクター <a class="btn btn-sm" href="#res">＋ キャラ</a></div>

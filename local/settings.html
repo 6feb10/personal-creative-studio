@@ -25,7 +25,7 @@
 <div class="page" style="padding-top: var(--safe-top);">
   <div id="header"></div>
   <h1 class="page-title">設定</h1>
-  <p class="page-subtitle">Settings</p>
+  <p class="page-subtitle">バックアップ・AIキー</p>
 
   <div class="set-section">
     <div class="set-head">💾 バックアップ / 引っ越し</div>
@@ -63,7 +63,7 @@
 <script>
 (async () => {
   await DS.appInit();
-  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', '⚙');
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', '⚙');
 
   // ── storage estimate ──
   if (navigator.storage?.estimate) {

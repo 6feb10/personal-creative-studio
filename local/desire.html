@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Desire — DreamStudio</title>
+<title>ノベル — DreamStudio</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
@@ -46,10 +46,10 @@ async function route() {
 }
 
 async function renderList() {
-  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'Home', ICON);
+  document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', ICON);
   const rows = Store.byUpdatedDesc(await DB.all(STORE));
   if (rows.length === 0) {
-    app.innerHTML = `<h1 class="page-title">ノベル</h1><p class="page-subtitle">Desire</p>
+    app.innerHTML = `<h1 class="page-title">ノベル</h1><p class="page-subtitle">物語を言葉に</p>
       <div class="empty"><div class="empty-icon">📖</div><p class="empty-text">まだ物語がありません。<br>最初のストーリーを、ここに。</p></div>`;
     return;
   }
@@ -57,7 +57,7 @@ async function renderList() {
   const active = new URLSearchParams(location.search).get('tag') || '';
   const filtered = active ? rows.filter(r => (r.tags||[]).includes(active)) : rows;
   app.innerHTML = `
-    <h1 class="page-title">ノベル</h1><p class="page-subtitle">Desire · ${rows.length}</p>
+    <h1 class="page-title">ノベル</h1><p class="page-subtitle">物語を言葉に · ${rows.length}</p>
     ${tags.length ? `<div class="filters"><a class="filter-chip ${!active?'active':''}" href="?">すべて</a>
       ${tags.map(t=>`<a class="filter-chip ${active===t?'active':''}" href="?tag=${encodeURIComponent(t)}">${DS.esc(t)}</a>`).join('')}</div>` : ''}
     <div id="cards"></div>`;
@@ -113,7 +113,7 @@ async function renderEdit(id) {
         <div class="flex-between"><label class="form-label">本文</label><span class="form-hint" id="cc">0 文字</span></div>
         <textarea class="form-textarea" name="body" id="body" style="min-height:300px;">${DS.esc(n?.body||'')}</textarea>
       </div>
-      ${projects.length ? `<div class="form-group"><label class="form-label">プロジェクト</label>
+      ${projects.length ? `<div class="form-group"><label class="form-label">プロット</label>
         <select class="form-select" name="projectId"><option value="">— なし —</option>
         ${projects.map(p=>`<option value="${p.id}" ${n?.projectId==p.id?'selected':''}>${DS.esc(p.name)}</option>`).join('')}</select></div>` : ''}
       <div class="form-group"><label class="form-label">タグ</label><input class="form-input" name="tags" value="${DS.esc((n?.tags||[]).join(', '))}" placeholder="例: 恋愛, ファンタジー, 日常"></div>

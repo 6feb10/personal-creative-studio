@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Chat — DreamStudio</title>
+<title>対話 — DreamStudio</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.json">
@@ -50,12 +50,12 @@ async function route() {
 }
 
 async function renderSetup() {
-  document.getElementById('header').innerHTML = DS.pageHeader('forge.html', 'Forge', ICON);
+  document.getElementById('header').innerHTML = DS.pageHeader('forge.html', 'AI生成', ICON);
   const [residents, ready] = await Promise.all([Store.byName(await DB.all('residents')), Store.providersReady()]);
   if (!ready.length) { app.innerHTML = `<h1 class="page-title">キャラと対話</h1><div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
   if (!residents.length) { app.innerHTML = `<h1 class="page-title">キャラと対話</h1><div class="card"><div class="card-excerpt">先に Cradle でキャラクターを作成してください。</div><a class="btn btn-sm mt-2" href="cradle.html">Cradleへ</a></div>`; return; }
   app.innerHTML = `
-    <h1 class="page-title">キャラと対話</h1><p class="page-subtitle">Chat</p>
+    <h1 class="page-title">キャラと対話</h1><p class="page-subtitle">AIと対話</p>
     <div class="form-group"><label class="form-label">モード</label><select class="form-select" id="mode">
       <option value="interview">インタビュー（1対1）</option><option value="duo">デュオ（2キャラの掛け合い）</option></select></div>
     <div class="form-group"><label class="form-label">AIプロバイダー</label><select class="form-select" id="provider">${ready.map(p=>`<option value="${p.id}">${DS.esc(p.displayName||p.name)}</option>`).join('')}</select></div>
