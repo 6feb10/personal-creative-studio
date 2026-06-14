@@ -64,8 +64,8 @@ async function renderMenu() {
 
 async function renderGenerate() {
   document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
-  const ready = await Store.providersReady();
-  if (!ready.length) { app.innerHTML = `<div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
+  const modelOpts = await Store.readyModels();
+  if (!modelOpts.length) { app.innerHTML = `<div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
   const [projects, bases, residents, templates, novels] = await Promise.all([
     Store.byName(await DB.all('projects')), Store.byName(await DB.all('bases')),
     Store.byName(await DB.all('residents')), await DB.all('forgeTemplates'), Store.byUpdatedDesc(await DB.all('novels')),
@@ -73,8 +73,8 @@ async function renderGenerate() {
   app.innerHTML = `
     <h1 class="page-title">物語を生成</h1>
     <form id="f" class="mt-3">
-      <div class="form-group"><label class="form-label">AIプロバイダー</label><select class="form-select" id="provider">
-        ${ready.map(p=>`<option value="${p.id}">${DS.esc(p.displayName||p.name)} (${DS.esc(p.model)})</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">AIモデル</label><select class="form-select" id="provider">
+        ${modelOpts.map(o=>`<option value="${o.providerId}:${o.idx}">${DS.esc(o.label)}</option>`).join('')}</select></div>
       ${projects.length?`<div class="form-group"><label class="form-label">プロット</label><select class="form-select" id="project"><option value="">— なし —</option>${projects.map(p=>`<option value="${p.id}">${DS.esc(p.name)}</option>`).join('')}</select></div>`:''}
       ${bases.length?`<div class="mat-heading">拠点</div><div class="chk-list" id="bases">${bases.map(b=>`<label class="chk"><input type="checkbox" value="${b.id}">${DS.esc(b.name)}</label>`).join('')}</div>`:''}
       ${residents.length?`<div class="mat-heading">キャラクター</div><div class="chk-list" id="residents">${residents.map(r=>`<label class="chk"><input type="checkbox" value="${r.id}">${DS.esc(r.name)}</label>`).join('')}</div>`:''}
@@ -88,7 +88,7 @@ async function renderGenerate() {
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('genBtn'); btn.disabled = true; btn.textContent = '生成中… ✨';
-    const providerId = Number(document.getElementById('provider').value);
+    const [providerId, modelIdx] = document.getElementById('provider').value.split(':').map(Number);
     const projectId = Number(document.getElementById('project')?.value) || null;
     const baseIds = [...app.querySelectorAll('#bases input:checked')].map(c=>Number(c.value));
     const residentIds = [...app.querySelectorAll('#residents input:checked')].map(c=>Number(c.value));
@@ -98,8 +98,8 @@ async function renderGenerate() {
     if (contNovelId) { const n = await DB.get('novels', contNovelId); prevContent = (n?.body||'').replace(/\{\{img:\d+\}\}/g,''); contMode = 'full'; }
     const sys = await buildSystem({ projectId, baseIds, residentIds, templateIds, prevContent, contMode });
     const user = document.getElementById('prompt').value.trim() || (prevContent ? 'この続きを書いてください。' : '上記の設定に基づいて、印象的なシーンを書いてください。');
-    const provider = ready.find(p=>p.id===providerId);
-    const res = await AI.call(provider, sys, user);
+    const provider = modelOpts.find(o=>o.providerId===providerId)?.provider;
+    const res = await AI.call(provider, sys, user, modelIdx);
     btn.disabled = false; btn.textContent = '✨ 生成する';
     if (res.error) { DS.toast(res.error, 'error'); return; }
     const genId = await DB.add('forgeGenerations', { provider: res.provider, model: res.model, promptSystem: sys, promptUser: user, output: res.text, inputTokens: res.inputTokens, outputTokens: res.outputTokens, cachedTokens: res.cachedTokens, costInput: res.costInput, costOutput: res.costOutput, costTotal: res.costTotal, savedToNovelId: contNovelId || null });

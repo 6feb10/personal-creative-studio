@@ -51,14 +51,14 @@ async function route() {
 
 async function renderSetup() {
   document.getElementById('header').innerHTML = DS.pageHeader('forge.html', 'AI生成', ICON);
-  const [residents, ready] = await Promise.all([Store.byName(await DB.all('residents')), Store.providersReady()]);
-  if (!ready.length) { app.innerHTML = `<h1 class="page-title">キャラと対話</h1><div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
+  const [residents, modelOpts] = await Promise.all([Store.byName(await DB.all('residents')), Store.readyModels()]);
+  if (!modelOpts.length) { app.innerHTML = `<h1 class="page-title">キャラと対話</h1><div class="card"><div class="card-excerpt">AIキーが未設定です。</div><a class="btn btn-sm btn-primary mt-2" href="settings.html">設定へ</a></div>`; return; }
   if (!residents.length) { app.innerHTML = `<h1 class="page-title">キャラと対話</h1><div class="card"><div class="card-excerpt">先に Cradle でキャラクターを作成してください。</div><a class="btn btn-sm mt-2" href="cradle.html">Cradleへ</a></div>`; return; }
   app.innerHTML = `
     <h1 class="page-title">キャラと対話</h1><p class="page-subtitle">AIと対話</p>
     <div class="form-group"><label class="form-label">モード</label><select class="form-select" id="mode">
       <option value="interview">インタビュー（1対1）</option><option value="duo">デュオ（2キャラの掛け合い）</option></select></div>
-    <div class="form-group"><label class="form-label">AIプロバイダー</label><select class="form-select" id="provider">${ready.map(p=>`<option value="${p.id}">${DS.esc(p.displayName||p.name)}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">AIモデル</label><select class="form-select" id="provider">${modelOpts.map(o=>`<option value="${o.providerId}:${o.idx}">${DS.esc(o.label)}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label" id="aLabel">キャラクター</label><select class="form-select" id="charA">${residents.map(r=>`<option value="${r.id}">${DS.esc(r.name)}</option>`).join('')}</select></div>
     <div class="form-group" id="bWrap" style="display:none;"><label class="form-label">相手キャラクター</label><select class="form-select" id="charB">${residents.map(r=>`<option value="${r.id}">${DS.esc(r.name)}</option>`).join('')}</select></div>
     <button class="btn btn-primary btn-block" id="start">対話をはじめる</button>`;
@@ -68,15 +68,16 @@ async function renderSetup() {
   });
   document.getElementById('start').addEventListener('click', () => {
     const mode = document.getElementById('mode').value;
-    cfg = { mode, providerId: Number(document.getElementById('provider').value), aId: Number(document.getElementById('charA').value), bId: mode==='duo' ? Number(document.getElementById('charB').value) : null };
+    const [providerId, modelIdx] = document.getElementById('provider').value.split(':').map(Number);
+    cfg = { mode, providerId, modelIdx, aId: Number(document.getElementById('charA').value), bId: mode==='duo' ? Number(document.getElementById('charB').value) : null };
     renderChat();
   });
 }
 
 async function startInterview(charId) {
-  const ready = await Store.providersReady();
-  if (!ready.length) { location.hash = ''; return renderSetup(); }
-  cfg = { mode: 'interview', providerId: ready[0].id, aId: charId, bId: null };
+  const modelOpts = await Store.readyModels();
+  if (!modelOpts.length) { location.hash = ''; return renderSetup(); }
+  cfg = { mode: 'interview', providerId: modelOpts[0].providerId, modelIdx: modelOpts[0].idx, aId: charId, bId: null };
   renderChat();
 }
 
@@ -158,7 +159,7 @@ async function send() {
     : `これまでの会話:\n${transcript}\n\n${a.name}として返答してください。`;
 
   const provider = await DB.get('apiProviders', cfg.providerId);
-  const res = await AI.call(provider, sys, user);
+  const res = await AI.call(provider, sys, user, cfg.modelIdx);
   sendBtn.disabled = false; sendBtn.textContent = '➤';
   if (res.error) { DS.toast(res.error, 'error'); return; }
   conv.push({ role: 'ai', name: cfg.mode === 'duo' ? null : a.name, text: res.text.trim() }); saveConv(); renderMessages();
