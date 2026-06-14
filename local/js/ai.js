@@ -83,14 +83,20 @@ function buildResult(provider, text, inT, outT, cachedT) {
 }
 
 async function callOpenAICompatible(p, sys, user) {
-  const proxy = p.proxy ? p.proxy : '';
-  const url = proxy || p.endpoint;
+  const url = p.proxy || p.endpoint;
   const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + p.apiKey };
-  const { data, error } = await postJSON(url, {
+  const body = {
     model: p.model,
     messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
-    max_tokens: 4096, temperature: 0.8,
-  }, headers);
+  };
+  if (p.providerType === 'OpenAI') {
+    // GPT-5 / o系は max_tokens 廃止＆temperature固定。新パラメータを使い温度は既定(1)に任せる。
+    body.max_completion_tokens = 4096;
+  } else {
+    body.max_tokens = 4096;
+    body.temperature = 0.8;
+  }
+  const { data, error } = await postJSON(url, body, headers);
   if (error) return { error };
   const text = data?.choices?.[0]?.message?.content ?? '';
   const u = data?.usage ?? {};
