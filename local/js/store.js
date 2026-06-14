@@ -65,7 +65,22 @@ const Store = {
     return list.filter((p) => p.enabled && p.apiKey && p.apiKey.trim() !== '');
   },
   async hasAnyAI() {
-    return (await Store.providersReady()).length > 0;
+    return (await Store.readyModels()).length > 0;
+  },
+
+  // 生成プルダウン用：有効プロバイダー × 登録モデルを平坦化
+  // → [{ providerId, idx, provider, model, label }]
+  async readyModels() {
+    const ready = await Store.providersReady();
+    const out = [];
+    for (const p of ready) {
+      const models = (window.AI && AI.modelsOf) ? AI.modelsOf(p) : [];
+      models.forEach((m, idx) => {
+        if (!m.model) return;
+        out.push({ providerId: p.id, idx, provider: p, model: m.model, label: `${p.displayName || p.name} · ${m.model}` });
+      });
+    }
+    return out;
   },
 };
 

@@ -91,9 +91,24 @@
     DS.flash('すべてのデータを削除しました'); location.reload();
   });
 
-  // ── AI providers ──
+  // ── AI providers（プロバイダー＋登録モデル） ──
   const presetSel = document.getElementById('presetSelect');
   AI.presets.forEach((p, i) => { const o = document.createElement('option'); o.value = i; o.textContent = p.displayName + '（' + p.providerType + '）'; presetSel.appendChild(o); });
+
+  const modelRowHTML = (m) => `
+    <div class="model-row prov-row" style="gap:0.4rem;margin-bottom:0.4rem;align-items:flex-end;">
+      <div class="form-group" style="flex:2;margin:0;"><div class="mini-label">モデルID</div><input class="form-input mr-model" value="${DS.esc(m.model || '')}" placeholder="例: gpt-4o"></div>
+      <div class="form-group" style="flex:1;margin:0;"><div class="mini-label">入力$</div><input class="form-input mr-in" inputmode="decimal" value="${DS.esc(m.costInput ?? 0)}"></div>
+      <div class="form-group" style="flex:1;margin:0;"><div class="mini-label">出力$</div><input class="form-input mr-out" inputmode="decimal" value="${DS.esc(m.costOutput ?? 0)}"></div>
+      <button class="btn btn-danger btn-sm mr-del" type="button" style="flex-shrink:0;padding:0.4rem 0.6rem;">×</button>
+    </div>`;
+
+  const catalogOptions = (type) => {
+    const cat = (AI.catalog && AI.catalog[type]) || [];
+    if (!cat.length) return '<option value="">（カタログなし）</option>';
+    return '<option value="">＋ カタログから選ぶ…</option>' +
+      cat.map((m) => `<option value="${DS.esc(m.model)}">${DS.esc(m.model)}（$${m.costInput}/$${m.costOutput}）</option>`).join('');
+  };
 
   async function renderProviders() {
     const list = document.getElementById('providerList');
@@ -101,37 +116,52 @@
     if (providers.length === 0) { list.innerHTML = '<p class="set-note">まだAIプロバイダーがありません。下から追加できます。</p>'; return; }
     list.innerHTML = '';
     for (const p of providers) {
+      const models = AI.modelsOf(p);
       const card = document.createElement('div');
       card.className = 'provider-card';
       card.innerHTML = `
         <div class="flex-between" style="margin-bottom:0.6rem;">
           <strong>${DS.esc(p.displayName || p.name)}</strong>
-          <label class="prov-row" style="gap:0.3rem;font-size:0.75rem;"><input type="checkbox" data-f="enabled" ${p.enabled ? 'checked' : ''}> 有効</label>
+          <label class="prov-row" style="gap:0.3rem;font-size:0.75rem;"><input type="checkbox" class="prov-enabled" ${p.enabled ? 'checked' : ''}> 有効</label>
         </div>
-        <div class="form-group"><div class="mini-label">APIキー</div><input class="form-input" type="password" data-f="apiKey" value="${DS.esc(p.apiKey || '')}" placeholder="sk-..."></div>
-        <div class="form-group"><div class="mini-label">モデルID</div><input class="form-input" data-f="model" value="${DS.esc(p.model || '')}"></div>
+        <div class="form-group"><div class="mini-label">APIキー</div><input class="form-input" data-f="apiKey" type="password" value="${DS.esc(p.apiKey || '')}" placeholder="sk-..."></div>
         <div class="form-group"><div class="mini-label">エンドポイント</div><input class="form-input" data-f="endpoint" value="${DS.esc(p.endpoint || '')}"></div>
-        <div class="prov-row">
-          <div class="form-group" style="flex:1;margin:0;"><div class="mini-label">入力 $/1M</div><input class="form-input" data-f="costInput" inputmode="decimal" value="${DS.esc(p.costInput ?? 0)}"></div>
-          <div class="form-group" style="flex:1;margin:0;"><div class="mini-label">出力 $/1M</div><input class="form-input" data-f="costOutput" inputmode="decimal" value="${DS.esc(p.costOutput ?? 0)}"></div>
+        <div class="mini-label" style="margin-top:0.5rem;">モデル（生成時にプルダウンで選べます）</div>
+        <div class="models-list">${models.map(modelRowHTML).join('')}</div>
+        <div class="prov-row" style="margin-top:0.3rem;">
+          <select class="form-select catalog-sel" style="flex:1;">${catalogOptions(p.providerType)}</select>
+          <button class="btn btn-sm manual-add" type="button">✏️ 手動</button>
         </div>
         <div class="prov-row" style="margin-top:0.7rem;">
-          <button class="btn btn-sm" data-act="save" style="flex:1;">保存</button>
-          <button class="btn btn-danger btn-sm" data-act="del">削除</button>
+          <button class="btn btn-sm prov-save" type="button" style="flex:1;">保存</button>
+          <button class="btn btn-danger btn-sm prov-del" type="button">削除</button>
         </div>`;
+
+      card.querySelector('.catalog-sel').addEventListener('change', (ev) => {
+        const mid = ev.target.value; if (!mid) return;
+        const entry = (AI.catalog[p.providerType] || []).find((m) => m.model === mid) || { model: mid, costInput: 0, costOutput: 0 };
+        card.querySelector('.models-list').insertAdjacentHTML('beforeend', modelRowHTML(entry));
+        ev.target.value = '';
+      });
+      card.querySelector('.manual-add').addEventListener('click', () => {
+        card.querySelector('.models-list').insertAdjacentHTML('beforeend', modelRowHTML({ model: '', costInput: 0, costOutput: 0 }));
+      });
       card.addEventListener('click', async (ev) => {
-        const act = ev.target.closest('[data-act]')?.dataset.act;
-        if (act === 'save') {
-          const g = (f) => card.querySelector(`[data-f="${f}"]`);
-          p.apiKey = g('apiKey').value.trim();
-          p.model = g('model').value.trim();
-          p.endpoint = g('endpoint').value.trim();
-          p.costInput = parseFloat(g('costInput').value) || 0;
-          p.costOutput = parseFloat(g('costOutput').value) || 0;
-          p.enabled = g('enabled').checked ? 1 : 0;
+        if (ev.target.classList.contains('mr-del')) { ev.target.closest('.model-row').remove(); return; }
+        if (ev.target.classList.contains('prov-save')) {
+          p.apiKey = card.querySelector('[data-f="apiKey"]').value.trim();
+          p.endpoint = card.querySelector('[data-f="endpoint"]').value.trim();
+          p.enabled = card.querySelector('.prov-enabled').checked ? 1 : 0;
+          const ms = [...card.querySelectorAll('.model-row')].map((r) => ({
+            model: r.querySelector('.mr-model').value.trim(),
+            costInput: parseFloat(r.querySelector('.mr-in').value) || 0,
+            costOutput: parseFloat(r.querySelector('.mr-out').value) || 0,
+          })).filter((m) => m.model);
+          p.models = ms;
+          if (ms[0]) { p.model = ms[0].model; p.costInput = ms[0].costInput; p.costOutput = ms[0].costOutput; }
           await DB.update('apiProviders', p);
-          DS.toast('保存しました');
-        } else if (act === 'del') {
+          DS.toast(ms.length ? '保存しました' : 'モデルを1つ以上登録してください', ms.length ? '' : 'error');
+        } else if (ev.target.classList.contains('prov-del')) {
           if (!await DS.confirmDialog('このプロバイダーを削除しますか？')) return;
           await DB.del('apiProviders', p.id); renderProviders();
         }
@@ -142,7 +172,13 @@
 
   document.getElementById('addProviderBtn').addEventListener('click', async () => {
     const preset = AI.presets[Number(presetSel.value) || 0];
-    await DB.add('apiProviders', { ...preset, apiKey: '', costInput: 0, costOutput: 0, enabled: 1 });
+    const cat = (AI.catalog[preset.providerType] || []);
+    const def = cat.find((m) => m.model === preset.model) || { model: preset.model, costInput: 0, costOutput: 0 };
+    await DB.add('apiProviders', {
+      providerType: preset.providerType, name: preset.name, displayName: preset.displayName,
+      endpoint: preset.endpoint, apiKey: '', models: [def],
+      model: def.model, costInput: def.costInput, costOutput: def.costOutput, enabled: 1,
+    });
     renderProviders();
   });
 

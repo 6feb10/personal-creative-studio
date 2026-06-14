@@ -13,6 +13,47 @@ const AI_PRESETS = [
   { providerType: 'Deepseek', name: 'Deepseek', displayName: 'Deepseek', endpoint: 'https://api.deepseek.com/chat/completions',  model: 'deepseek-chat' },
 ];
 
+// プロバイダー種別ごとの「モデル登録」カタログ。
+// 設定でプルダウンから選ぶと料金が自動で入る（手動追加・編集も可）。料金は USD / 100万トークン。
+const AI_MODEL_CATALOG = {
+  Claude: [
+    { model: 'claude-opus-4-8',   costInput: 5,    costOutput: 25 },
+    { model: 'claude-sonnet-4-6', costInput: 3,    costOutput: 15 },
+    { model: 'claude-haiku-4-5',  costInput: 1,    costOutput: 5 },
+    { model: 'claude-opus-4-7',   costInput: 5,    costOutput: 25 },
+    { model: 'claude-fable-5',    costInput: 10,   costOutput: 50 },
+  ],
+  OpenAI: [
+    { model: 'gpt-5.5',        costInput: 5,    costOutput: 30 },
+    { model: 'gpt-5.4',        costInput: 2.5,  costOutput: 15 },
+    { model: 'gpt-5.4-mini',   costInput: 0.75, costOutput: 4.5 },
+    { model: 'gpt-5.4-nano',   costInput: 0.2,  costOutput: 1.25 },
+    { model: 'gpt-5.2',        costInput: 1.75, costOutput: 14 },
+    { model: 'gpt-5.1',        costInput: 1.25, costOutput: 10 },
+    { model: 'gpt-5',          costInput: 1.25, costOutput: 10 },
+    { model: 'gpt-5-mini',     costInput: 0.25, costOutput: 2 },
+    { model: 'gpt-5-nano',     costInput: 0.05, costOutput: 0.4 },
+    { model: 'gpt-4.1',        costInput: 2,    costOutput: 8 },
+    { model: 'gpt-4.1-mini',   costInput: 0.4,  costOutput: 1.6 },
+    { model: 'gpt-4.1-nano',   costInput: 0.1,  costOutput: 0.4 },
+    { model: 'gpt-4o',         costInput: 2.5,  costOutput: 10 },
+    { model: 'gpt-4o-mini',    costInput: 0.15, costOutput: 0.6 },
+    { model: 'o3',             costInput: 2,    costOutput: 8 },
+    { model: 'o4-mini',        costInput: 1.1,  costOutput: 4.4 },
+  ],
+  // 料金が未確定のものは 0。設定画面で編集してください。
+  Gemini:   [ { model: 'gemini-2.0-flash', costInput: 0, costOutput: 0 } ],
+  Grok:     [ { model: 'grok-2',           costInput: 0, costOutput: 0 } ],
+  Deepseek: [ { model: 'deepseek-chat',    costInput: 0, costOutput: 0 } ],
+};
+
+// provider レコードの登録モデル一覧を正規化（旧形式：単一 model + 単価 も吸収）
+function modelsOf(p) {
+  if (p && Array.isArray(p.models) && p.models.length) return p.models;
+  if (p && p.model) return [{ model: p.model, costInput: Number(p.costInput) || 0, costOutput: Number(p.costOutput) || 0 }];
+  return [];
+}
+
 async function postJSON(url, body, headers) {
   try {
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -88,15 +129,24 @@ async function callGemini(p, sys, user) {
   return buildResult(p, text, u.promptTokenCount || 0, u.candidatesTokenCount || 0, u.cachedContentTokenCount || 0);
 }
 
-// provider レコード + system/user → 結果
-async function aiCall(provider, sys, user) {
+// provider レコード + system/user → 結果。
+// modelSel: 使うモデルの指定（登録モデル配列のindex / モデルID文字列 / {model,costInput,costOutput}）。
+// 省略時は先頭の登録モデルを使用。
+async function aiCall(provider, sys, user, modelSel) {
   if (!provider) return { error: 'プロバイダーが未設定です' };
   if (!provider.apiKey) return { error: (provider.displayName || provider.name) + ' のAPIキーが未設定です' };
-  switch (provider.providerType) {
-    case 'OpenAI': case 'Grok': case 'Deepseek': return callOpenAICompatible(provider, sys, user);
-    case 'Claude': return callClaude(provider, sys, user);
-    case 'Gemini': return callGemini(provider, sys, user);
-    default: return { error: '未対応のプロバイダータイプ: ' + provider.providerType };
+  const models = modelsOf(provider);
+  let sel = modelSel;
+  if (typeof sel === 'number') sel = models[sel];
+  else if (typeof sel === 'string') sel = models.find((m) => m.model === sel) || { model: sel, costInput: 0, costOutput: 0 };
+  if (!sel || !sel.model) sel = models[0];
+  if (!sel || !sel.model) return { error: (provider.displayName || provider.name) + ' のモデルが未設定です' };
+  const p = { ...provider, model: sel.model, costInput: Number(sel.costInput) || 0, costOutput: Number(sel.costOutput) || 0 };
+  switch (p.providerType) {
+    case 'OpenAI': case 'Grok': case 'Deepseek': return callOpenAICompatible(p, sys, user);
+    case 'Claude': return callClaude(p, sys, user);
+    case 'Gemini': return callGemini(p, sys, user);
+    default: return { error: '未対応のプロバイダータイプ: ' + p.providerType };
   }
 }
 
@@ -106,4 +156,4 @@ async function aiCallById(providerId, sys, user) {
   return aiCall(p, sys, user);
 }
 
-window.AI = { presets: AI_PRESETS, call: aiCall, callById: aiCallById };
+window.AI = { presets: AI_PRESETS, catalog: AI_MODEL_CATALOG, modelsOf, call: aiCall, callById: aiCallById };
