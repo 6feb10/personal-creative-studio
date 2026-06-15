@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════
 //  DreamStudio Local — Service Worker (offline-first)
 // ═══════════════════════════════════════════════
-const CACHE = 'dreamstudio-local-v8';
+const CACHE = 'dreamstudio-local-v9';
 
 const ASSETS = [
   './',
@@ -36,6 +36,17 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
 
   if (url.origin === self.location.origin) {
+    // ページ遷移（HTML）はネット優先 → 更新が即反映。オフライン時はキャッシュにフォールバック。
+    if (req.mode === 'navigate') {
+      e.respondWith(
+        fetch(req).then((res) => {
+          if (res.ok) { const clone = res.clone(); caches.open(CACHE).then((c) => c.put(req, clone)); }
+          return res;
+        }).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
+      );
+      return;
+    }
+    // JS/CSS/画像などはキャッシュ優先（高速・オフライン動作）。CACHE更新時に入れ替わる。
     e.respondWith(
       caches.match(req).then((hit) => hit || fetch(req).then((res) => {
         if (res.ok) { const clone = res.clone(); caches.open(CACHE).then((c) => c.put(req, clone)); }
