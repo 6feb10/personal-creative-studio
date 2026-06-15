@@ -65,11 +65,19 @@
   await DS.appInit();
   document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', '⚙');
 
-  // ── storage estimate ──
+  // ── storage estimate + 保持状態 ──
   if (navigator.storage?.estimate) {
-    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+    const { usage = 0 } = await navigator.storage.estimate();
     const mb = (n) => (n / 1024 / 1024).toFixed(1);
-    document.getElementById('storageInfo').textContent = `使用容量: 約 ${mb(usage)} MB`;
+    let line = `使用容量: 約 ${mb(usage)} MB`;
+    try {
+      if (navigator.storage.persisted) {
+        let persisted = await navigator.storage.persisted();
+        if (!persisted && navigator.storage.persist) persisted = await navigator.storage.persist();
+        line += persisted ? '　/　保持: ON（自動削除されにくい）' : '　/　保持: OFF';
+      }
+    } catch (e) { /* 非対応は表示しない */ }
+    document.getElementById('storageInfo').textContent = line;
   }
 
   // ── backup ──
