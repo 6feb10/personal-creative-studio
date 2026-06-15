@@ -27,6 +27,7 @@
 .group { margin-bottom: 0.7rem; }
 .group-label { font-family: 'M PLUS Rounded 1c', sans-serif; font-weight: 700; font-size: 0.62rem; letter-spacing: 0.14em; color: rgba(124,92,255,0.55); margin: 0 0 0.4rem 0.25rem; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.stack { display: flex; flex-direction: column; gap: 0.6rem; }
 
 .tile { display: flex; align-items: center; gap: 0.6rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 0.9rem 0.85rem; text-decoration: none; color: inherit; position: relative; overflow: hidden; min-height: 56px; box-shadow: 0 2px 12px rgba(124,92,255,0.05); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); -webkit-tap-highlight-color: transparent; transition: transform 0.2s; }
 .tile::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--orchid), transparent); opacity: 0.3; }
@@ -74,11 +75,13 @@
 
     <div class="group">
       <div class="group-label">保存・閲覧</div>
-      <div class="grid2">
+      <div class="stack">
         <a href="desire.html" class="tile"><span class="tile-icon">📖</span>
-          <div class="tile-body"><div class="tile-name">ノベル</div><span class="tile-count" id="c-desire"></span></div></a>
+          <div class="tile-body"><div class="tile-name">ノベル</div><div class="tile-desc">物語を言葉に</div></div>
+          <span class="tile-count" id="c-desire"></span></a>
         <a href="reverie.html" class="tile"><span class="tile-icon">🖼️</span>
-          <div class="tile-body"><div class="tile-name">ギャラリー</div><span class="tile-count" id="c-reverie"></span></div></a>
+          <div class="tile-body"><div class="tile-name">ギャラリー</div><div class="tile-desc">画像の展示室</div></div>
+          <span class="tile-count" id="c-reverie"></span></a>
       </div>
     </div>
 
