@@ -8,7 +8,7 @@
 const AI_PRESETS = [
   { providerType: 'OpenAI',   name: 'OpenAI',   displayName: 'OpenAI',   endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o' },
   { providerType: 'Claude',   name: 'Claude',   displayName: 'Claude',   endpoint: 'https://api.anthropic.com/v1/messages',      model: 'claude-sonnet-4-6' },
-  { providerType: 'Gemini',   name: 'Gemini',   displayName: 'Gemini',   endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/', model: 'gemini-2.0-flash' },
+  { providerType: 'Gemini',   name: 'Gemini',   displayName: 'Gemini',   endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/', model: 'gemini-2.5-flash' },
   { providerType: 'Grok',     name: 'Grok',     displayName: 'Grok',     endpoint: 'https://api.x.ai/v1/chat/completions',       model: 'grok-2' },
   { providerType: 'Deepseek', name: 'Deepseek', displayName: 'Deepseek', endpoint: 'https://api.deepseek.com/chat/completions',  model: 'deepseek-chat' },
 ];
@@ -41,8 +41,18 @@ const AI_MODEL_CATALOG = {
     { model: 'o3',             costInput: 2,    costOutput: 8 },
     { model: 'o4-mini',        costInput: 1.1,  costOutput: 4.4 },
   ],
+  // Gemini は Standard 料金。pro系は ≤200k トークンの単価（超過時はGoogle側で上がる）。
+  Gemini: [
+    { model: 'gemini-3.5-flash',                      costInput: 1.5,  costOutput: 9 },
+    { model: 'gemini-3.1-pro-preview',                costInput: 2,    costOutput: 12 },
+    { model: 'gemini-3-flash-preview',                costInput: 0.5,  costOutput: 3 },
+    { model: 'gemini-3.1-flash-lite',                 costInput: 0.25, costOutput: 1.5 },
+    { model: 'gemini-2.5-pro',                        costInput: 1.25, costOutput: 10 },
+    { model: 'gemini-2.5-flash',                      costInput: 0.3,  costOutput: 2.5 },
+    { model: 'gemini-2.5-flash-lite',                 costInput: 0.1,  costOutput: 0.4 },
+    { model: 'gemini-2.5-flash-lite-preview-09-2025', costInput: 0.1,  costOutput: 0.4 },
+  ],
   // 料金が未確定のものは 0。設定画面で編集してください。
-  Gemini:   [ { model: 'gemini-2.0-flash', costInput: 0, costOutput: 0 } ],
   Grok:     [ { model: 'grok-2',           costInput: 0, costOutput: 0 } ],
   Deepseek: [ { model: 'deepseek-chat',    costInput: 0, costOutput: 0 } ],
 };
