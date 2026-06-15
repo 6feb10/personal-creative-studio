@@ -89,6 +89,12 @@ async function appInit() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  // 端末内データ（画像など）が空き容量逼迫で自動削除されないよう保持を申請（任意・無害）
+  try {
+    if (navigator.storage && navigator.storage.persist && navigator.storage.persisted) {
+      if (!(await navigator.storage.persisted())) await navigator.storage.persist();
+    }
+  } catch (e) { /* 非対応ブラウザは無視 */ }
   try { await seedIfEmpty(); } catch (e) { console.error(e); }
   showPendingFlash();
 }
