@@ -115,7 +115,7 @@
     const cat = (AI.catalog && AI.catalog[type]) || [];
     if (!cat.length) return '<option value="">（カタログなし）</option>';
     return '<option value="">＋ カタログから選ぶ…</option>' +
-      cat.map((m) => `<option value="${DS.esc(m.model)}">${DS.esc(m.model)}（$${m.costInput}/$${m.costOutput}）</option>`).join('');
+      cat.map((m) => `<option value="${DS.esc(m.model)}">${DS.esc(m.model)}（$${m.costInput}/$${m.costOutput}${m.note ? ' ' + DS.esc(m.note) : ''}）</option>`).join('');
   };
 
   async function renderProviders() {

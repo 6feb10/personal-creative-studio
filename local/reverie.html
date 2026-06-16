@@ -39,7 +39,8 @@
 <script>
 const STORE = 'images', ICON = '🖼️';
 const app = document.getElementById('app');
-const parseTags = (s) => [...new Set(String(s||'').split(/[,、\s]+/).map(t=>t.trim()).filter(Boolean))];
+// タグ区切りはカンマ・読点のみ（名前内のスペースを保持。例: 「欲守 燈真」を1タグに）
+const parseTags = (s) => [...new Set(String(s||'').split(/[,、，]+/).map(t=>t.trim()).filter(Boolean))];
 
 async function route() {
   const [mode] = location.hash.slice(1).split('/');

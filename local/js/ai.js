@@ -41,13 +41,13 @@ const AI_MODEL_CATALOG = {
     { model: 'o3',             costInput: 2,    costOutput: 8 },
     { model: 'o4-mini',        costInput: 1.1,  costOutput: 4.4 },
   ],
-  // Gemini は Standard 料金。pro系は ≤200k トークンの単価（超過時はGoogle側で上がる）。
+  // Gemini は Standard 料金。pro系は小説など長文を見越して 200k超の高い方の単価を採用（過小表示を避ける）。
   Gemini: [
     { model: 'gemini-3.5-flash',                      costInput: 1.5,  costOutput: 9 },
-    { model: 'gemini-3.1-pro-preview',                costInput: 2,    costOutput: 12 },
+    { model: 'gemini-3.1-pro-preview',                costInput: 4,    costOutput: 18, note: '長文向け(200k超単価)' },
     { model: 'gemini-3-flash-preview',                costInput: 0.5,  costOutput: 3 },
     { model: 'gemini-3.1-flash-lite',                 costInput: 0.25, costOutput: 1.5 },
-    { model: 'gemini-2.5-pro',                        costInput: 1.25, costOutput: 10 },
+    { model: 'gemini-2.5-pro',                        costInput: 2.5,  costOutput: 15, note: '長文向け(200k超単価)' },
     { model: 'gemini-2.5-flash',                      costInput: 0.3,  costOutput: 2.5 },
     { model: 'gemini-2.5-flash-lite',                 costInput: 0.1,  costOutput: 0.4 },
     { model: 'gemini-2.5-flash-lite-preview-09-2025', costInput: 0.1,  costOutput: 0.4 },
