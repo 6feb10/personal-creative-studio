@@ -36,7 +36,7 @@ const app = document.getElementById('app');
 async function route() {
   const [mode, id] = location.hash.slice(1).split('/');
   let prefill = '';
-  if (mode === 'novel' && id) { const n = await DB.get('novels', Number(id)); prefill = (n?.body||'').replace(/\{\{img:\d+\}\}/g,'').trim(); }
+  if (mode === 'novel' && id) { const n = await DB.get('novels', Number(id)); prefill = Store.stripMarkers(n?.body||'').trim(); }
   renderForm(prefill);
 }
 
@@ -73,8 +73,16 @@ async function renderForm(prefill) {
     document.getElementById('out').innerHTML = `
       <div class="detail-heading" style="font-family:'M PLUS Rounded 1c',sans-serif;font-weight:700;color:var(--pearl);margin:1.2rem 0 0.5rem;">結果</div>
       <div class="card"><div class="illust-result" id="resultText">${DS.esc(res.text)}</div></div>
-      <button class="btn btn-sm" id="copyBtn">📋 コピー</button>`;
+      <div class="prov-row" style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+        <button class="btn btn-sm" id="copyBtn" style="flex:1;">📋 コピー</button>
+        <button class="btn btn-sm btn-primary" id="saveGal" style="flex:1;">🌙 ギャラリーに保存</button>
+      </div>`;
     document.getElementById('copyBtn').addEventListener('click', () => { navigator.clipboard?.writeText(res.text); DS.toast('コピーしました'); });
+    document.getElementById('saveGal').addEventListener('click', () => {
+      // 生成プロンプトを引き継いでギャラリーのアップロード画面へ（画像を選んで保存すると絵＋レシピがセットで残る）
+      try { sessionStorage.setItem('reveriePrefillPrompt', res.text); } catch (e) {}
+      location.href = 'reverie.html#upload';
+    });
     document.getElementById('out').scrollIntoView({ behavior: 'smooth' });
   });
 }

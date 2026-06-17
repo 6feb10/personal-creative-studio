@@ -11,7 +11,7 @@ function esc(s) {
 
 // 抜粋（PHPの excerpt() 相当）
 function excerpt(text, len = 80) {
-  const plain = String(text ?? '').replace(/<[^>]*>/g, '').replace(/\{\{img:\d+\}\}/g, '');
+  const plain = String(text ?? '').replace(/<[^>]*>/g, '').replace(/\{\{img:\d+\}\}|\{\{h:[^}]*\}\}/g, '');
   return [...plain].length > len ? [...plain].slice(0, len).join('') + '…' : plain;
 }
 
