@@ -95,7 +95,7 @@ async function renderGenerate() {
     const templateIds = [...app.querySelectorAll('#templates input:checked')].map(c=>Number(c.value));
     const contNovelId = Number(document.getElementById('contNovel')?.value) || null;
     let prevContent = '', contMode = '';
-    if (contNovelId) { const n = await DB.get('novels', contNovelId); prevContent = (n?.body||'').replace(/\{\{img:\d+\}\}/g,''); contMode = 'full'; }
+    if (contNovelId) { const n = await DB.get('novels', contNovelId); prevContent = Store.stripMarkers(n?.body||''); contMode = 'full'; }
     const sys = await buildSystem({ projectId, baseIds, residentIds, templateIds, prevContent, contMode });
     const user = document.getElementById('prompt').value.trim() || (prevContent ? 'この続きを書いてください。' : '上記の設定に基づいて、印象的なシーンを書いてください。');
     const provider = modelOpts.find(o=>o.providerId===providerId)?.provider;

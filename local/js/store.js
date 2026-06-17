@@ -32,12 +32,18 @@ const Store = {
     return url;
   },
 
-  // ノベル本文の {{img:ID}} を画像に展開（ビジュアルノベル表示）
+  // 本文中の {{img:ID}} / {{h:見出し}} を取り除いた素のテキスト
+  stripMarkers(s) {
+    return String(s || '').replace(/\{\{img:\d+\}\}|\{\{h:[^}]*\}\}/g, '');
+  },
+
+  // ノベル本文の {{img:ID}}=画像 / {{h:見出し}}=シーン見出し を展開
   renderNovelBody(body, imageMap) {
-    const parts = String(body || '').split(/(\{\{img:\d+\}\})/g);
+    const parts = String(body || '').split(/(\{\{img:\d+\}\}|\{\{h:[^}]*\}\})/g);
     let html = '';
+    let hi = 0;
     for (const part of parts) {
-      const m = part.match(/^\{\{img:(\d+)\}\}$/);
+      let m = part.match(/^\{\{img:(\d+)\}\}$/);
       if (m) {
         const img = imageMap.get(Number(m[1]));
         if (img) {
@@ -45,11 +51,30 @@ const Store = {
           const cap = img.description ? `<figcaption class="still-caption">${DS.esc(img.description)}</figcaption>` : '';
           html += `<figure class="still-frame"><img src="${url}" alt="">${cap}</figure>`;
         }
-      } else if (part.trim() !== '') {
+        continue;
+      }
+      m = part.match(/^\{\{h:([^}]*)\}\}$/);
+      if (m) {
+        hi += 1;
+        html += `<h3 class="novel-heading" id="scene-${hi}">${DS.esc(m[1].trim())}</h3>`;
+        continue;
+      }
+      if (part.trim() !== '') {
         html += `<div class="novel-text-block">${DS.esc(part).replace(/\n/g, '<br>')}</div>`;
       }
     }
     return html;
+  },
+
+  // 本文中の見出しから目次を組み立てる（{anchor, text} の配列）
+  novelToc(body) {
+    const toc = [];
+    let i = 0;
+    for (const m of String(body || '').matchAll(/\{\{h:([^}]*)\}\}/g)) {
+      i += 1;
+      toc.push({ anchor: 'scene-' + i, text: m[1].trim() });
+    }
+    return toc;
   },
 
   // 本文中で参照されている画像IDを抽出
@@ -57,6 +82,23 @@ const Store = {
     const ids = new Set();
     for (const m of String(body || '').matchAll(/\{\{img:(\d+)\}\}/g)) ids.add(Number(m[1]));
     return [...ids];
+  },
+
+  // 画像の表示順（sortOrder優先、無ければ作成日時の新しい順）
+  bySort(rows) {
+    return [...rows].sort((a, b) => {
+      const ao = (a.sortOrder ?? Infinity), bo = (b.sortOrder ?? Infinity);
+      if (ao !== bo) return ao - bo;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  },
+
+  // 棚（タグ条件）に画像が合致するか。matchMode: 'all'=全タグ一致 / それ以外=いずれか一致
+  shelfMatch(shelf, img) {
+    const want = shelf.tagNames || [];
+    const have = img.tags || [];
+    if (!want.length) return false;
+    return shelf.matchMode === 'all' ? want.every((t) => have.includes(t)) : want.some((t) => have.includes(t));
   },
 
   // このAIプロバイダーが使える状態か（有効＋キーあり）

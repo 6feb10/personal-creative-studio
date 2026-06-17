@@ -15,9 +15,24 @@
 .lightbox.show { display: flex; }
 .lightbox-img { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .lightbox-img img { max-width: 100%; max-height: 100%; border-radius: 8px; }
-.lightbox-panel { background: var(--deep-violet); border-top: 1px solid var(--card-border); padding: 1rem 1.2rem calc(1.2rem + var(--safe-bottom)); max-height: 45%; overflow-y: auto; }
+.lightbox-panel { background: var(--deep-violet); border-top: 1px solid var(--card-border); padding: 1rem 1.2rem calc(1.2rem + var(--safe-bottom)); max-height: 55%; overflow-y: auto; }
 .upload-drop { border: 1.5px dashed rgba(124,92,255,0.3); border-radius: 14px; padding: 2rem 1rem; text-align: center; color: rgba(58,47,74,0.6); cursor: pointer; }
 .upload-icon { font-size: 2rem; }
+.sec-head { font-family: 'M PLUS Rounded 1c', sans-serif; font-weight: 700; font-size: 0.85rem; color: var(--orchid); margin: 1.3rem 0 0.5rem; }
+.shelf-row { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.3rem; -webkit-overflow-scrolling: touch; }
+.shelf-card { flex: 0 0 auto; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.65rem 0.9rem; text-decoration: none; color: inherit; min-width: 92px; box-shadow: 0 2px 10px rgba(124,92,255,0.05); }
+.shelf-card .s-name { font-family: 'M PLUS Rounded 1c', sans-serif; font-weight: 700; font-size: 0.84rem; color: var(--pearl); white-space: nowrap; }
+.shelf-card .s-count { font-size: 0.62rem; color: var(--orchid); margin-top: 0.2rem; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+.sugg-chip { font-size: 0.72rem; padding: 0.3rem 0.6rem; border: 1px solid rgba(124,92,255,0.25); border-radius: 16px; background: rgba(255,255,255,0.5); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.tag-check { font-size: 0.78rem; padding: 0.35rem 0.7rem; border: 1px solid rgba(124,92,255,0.22); border-radius: 18px; cursor: pointer; display: inline-block; margin: 0 0.3rem 0.3rem 0; -webkit-tap-highlight-color: transparent; }
+.tag-check.on { background: rgba(124,92,255,0.15); border-color: var(--orchid); color: var(--orchid); }
+.order-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.order-item { display: flex; align-items: center; gap: 0.6rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 0.4rem 0.5rem; }
+.order-item img { width: 46px; height: 46px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.order-item .oi-body { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--pearl); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(124,92,255,0.25); background: rgba(255,255,255,0.5); font-size: 1rem; }
+.prompt-box { white-space: pre-wrap; font-family: monospace; font-size: 0.76rem; line-height: 1.6; color: var(--pearl); background: rgba(255,255,255,0.4); border: 1px solid rgba(124,92,255,0.12); border-radius: 8px; padding: 0.6rem; }
 </style>
 </head>
 <body>
@@ -37,36 +52,81 @@
 <script src="js/ui.js"></script>
 <script src="js/store.js"></script>
 <script>
-const STORE = 'images', ICON = '🖼️';
+const STORE = 'images', SHELVES = 'imageFolders', ICON = '🖼️';
 const app = document.getElementById('app');
 // タグ区切りはカンマ・読点のみ（名前内のスペースを保持。例: 「欲守 燈真」を1タグに）
 const parseTags = (s) => [...new Set(String(s||'').split(/[,、，]+/).map(t=>t.trim()).filter(Boolean))];
 
+// タグ候補（住人名・ノベルタイトル・既存の画像タグ）
+async function suggestionTags() {
+  const [residents, novels, images] = await Promise.all([DB.all('residents'), DB.all('novels'), DB.all(STORE)]);
+  const set = new Set();
+  residents.forEach(r => r.name && set.add(r.name));
+  novels.forEach(n => n.title && set.add(n.title));
+  images.forEach(im => (im.tags||[]).forEach(t => set.add(t)));
+  return [...set].sort((a,b)=>a.localeCompare(b,'ja'));
+}
+function addTagToInput(input, tag) {
+  const cur = parseTags(input.value);
+  if (!cur.includes(tag)) cur.push(tag);
+  input.value = cur.join(', ');
+}
+// 入力欄の下にタグ候補チップを並べる
+function mountChips(containerId, input, suggestions) {
+  const c = document.getElementById(containerId);
+  if (!c || !suggestions.length) return;
+  c.innerHTML = suggestions.map(t => `<span class="sugg-chip">${DS.esc(t)}</span>`).join('');
+  c.querySelectorAll('.sugg-chip').forEach((chip, i) => chip.addEventListener('click', () => addTagToInput(input, suggestions[i])));
+}
+
 async function route() {
-  const [mode] = location.hash.slice(1).split('/');
-  document.getElementById('fab').style.display = mode === 'upload' ? 'none' : '';
+  const [mode, id] = location.hash.slice(1).split('/');
+  document.getElementById('fab').style.display = (mode === 'upload' || mode === 'shelfform' || mode === 'order') ? 'none' : '';
   if (mode === 'upload') return renderUpload();
+  if (mode === 'shelf' && id) return renderShelf(Number(id));
+  if (mode === 'shelfform') return renderShelfForm(id ? Number(id) : null);
+  if (mode === 'order') return renderOrder();
   return renderList();
 }
 
+// ── 一覧（棚オーバービュー＋すべての画像） ──
 async function renderList() {
   document.getElementById('header').innerHTML = DS.pageHeader('index.html', 'ホーム', ICON);
-  const rows = Store.byCreatedDesc(await DB.all(STORE));
-  if (rows.length === 0) {
+  const [images, shelves] = await Promise.all([Store.bySort(await DB.all(STORE)), DB.all(SHELVES)]);
+  if (images.length === 0 && shelves.length === 0) {
     app.innerHTML = `<h1 class="page-title">ギャラリー</h1><p class="page-subtitle">画像の展示室</p>
       <div class="empty"><div class="empty-icon">🖼️</div><p class="empty-text">まだ画像がありません。<br>最初の一枚を、ここに。</p></div>`;
     return;
   }
-  const tags = Store.collectTags(rows);
+  const byKind = (k) => shelves.filter(s => s.kind === k).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  const shelfCard = (s) => `<a class="shelf-card" href="#shelf/${s.id}"><div class="s-name">${DS.esc(s.name)}</div><div class="s-count">${images.filter(im=>Store.shelfMatch(s,im)).length}枚</div></a>`;
+  const section = (label, arr) => arr.length ? `<div class="sec-head">${label}</div><div class="shelf-row">${arr.map(shelfCard).join('')}</div>` : '';
+  const tags = Store.collectTags(images);
   const active = new URLSearchParams(location.search).get('tag') || '';
-  const filtered = active ? rows.filter(r => (r.tags||[]).includes(active)) : rows;
+  const filtered = active ? images.filter(r => (r.tags||[]).includes(active)) : images;
   app.innerHTML = `
-    <h1 class="page-title">ギャラリー</h1><p class="page-subtitle">画像の展示室 · ${rows.length}</p>
+    <h1 class="page-title">ギャラリー</h1><p class="page-subtitle">画像の展示室 · ${images.length}</p>
+    <div class="chip-row" style="margin-bottom:0.3rem;">
+      <a class="btn btn-sm" href="#shelfform">＋ 棚を作る</a>
+      <button class="btn btn-sm" id="syncBtn">👤 住人棚を同期</button>
+      ${images.length ? `<a class="btn btn-sm" href="#order">🔀 並び替え</a>` : ''}
+    </div>
+    ${section('👤 住人棚', byKind('resident'))}
+    ${section('💕 組み合わせの棚', byKind('coupling'))}
+    ${section('🗂 自由棚', byKind('custom'))}
+    <div class="sec-head">すべての画像</div>
     ${tags.length ? `<div class="filters"><a class="filter-chip ${!active?'active':''}" href="?">すべて</a>
       ${tags.map(t=>`<a class="filter-chip ${active===t?'active':''}" href="?tag=${encodeURIComponent(t)}">${DS.esc(t)}</a>`).join('')}</div>` : ''}
     <div class="gallery-grid" id="grid"></div>`;
+  fillGrid(filtered);
+  document.getElementById('syncBtn').addEventListener('click', syncResidentShelves);
+}
+
+function fillGrid(images) {
   const grid = document.getElementById('grid');
-  for (const img of filtered) {
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (const img of images) {
     const cell = document.createElement('div');
     cell.className = 'gallery-item';
     cell.innerHTML = `<img src="${Store.imageURL(img)}" alt="" loading="lazy">`;
@@ -75,17 +135,137 @@ async function renderList() {
   }
 }
 
+async function syncResidentShelves() {
+  const [residents, shelves] = await Promise.all([DB.all('residents'), DB.all(SHELVES)]);
+  let added = 0;
+  for (const r of residents) {
+    if (!r.name) continue;
+    if (shelves.some(s => s.kind === 'resident' && s.name === r.name)) continue;
+    await DB.add(SHELVES, { kind: 'resident', name: r.name, matchMode: 'any', tagNames: [r.name], sortOrder: Date.now() });
+    added += 1;
+  }
+  DS.toast(added ? `${added}件の住人棚を作成しました` : '新しい住人棚はありませんでした');
+  route();
+}
+
+// ── 棚の中身 ──
+async function renderShelf(id) {
+  const s = await DB.get(SHELVES, id);
+  if (!s) { location.hash = ''; return; }
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  const images = Store.bySort(await DB.all(STORE)).filter(im => Store.shelfMatch(s, im));
+  const kindLabel = { resident: '👤 住人棚', coupling: '💕 組み合わせ', custom: '🗂 自由棚' }[s.kind] || '棚';
+  app.innerHTML = `
+    <h1 class="page-title">${DS.esc(s.name)}</h1>
+    <p class="page-subtitle">${kindLabel} · ${s.matchMode === 'all' ? '全タグ一致' : 'いずれか一致'} · ${images.length}枚</p>
+    <div class="chip-row" style="margin:0.3rem 0 0.6rem;">
+      ${(s.tagNames||[]).map(t=>`<span class="tag">${DS.esc(t)}</span>`).join('')}
+    </div>
+    <div class="prov-row" style="display:flex;gap:0.5rem;margin-bottom:0.6rem;">
+      <a class="btn btn-sm" href="#shelfform/${s.id}" style="flex:1;">棚を編集</a>
+      <button class="btn btn-danger btn-sm" id="delShelf">棚を削除</button>
+    </div>
+    ${images.length ? `<div class="gallery-grid" id="grid"></div>` : '<p class="empty-text">この棚に合う画像がまだありません。</p>'}`;
+  fillGrid(images);
+  document.getElementById('delShelf').addEventListener('click', async () => {
+    if (!await DS.confirmDialog('この棚を削除しますか？（画像は消えません）')) return;
+    await DB.del(SHELVES, s.id); DS.toast('棚を削除しました'); location.hash = '';
+  });
+}
+
+// ── 棚の作成・編集 ──
+async function renderShelfForm(id) {
+  const s = id ? await DB.get(SHELVES, id) : null;
+  document.getElementById('header').innerHTML = DS.pageHeader(id ? `#shelf/${id}` : '#', '戻る', ICON);
+  const opts = await suggestionTags();
+  const sel = new Set(s?.tagNames || []);
+  app.innerHTML = `
+    <h1 class="page-title">${s ? '棚を編集' : '新しい棚'}</h1>
+    <form id="sf" class="mt-3">
+      <div class="form-group"><label class="form-label">棚の名前</label><input class="form-input" name="name" value="${DS.esc(s?.name||'')}" placeholder="例: 燈真, A子×B男, 風景" required></div>
+      <div class="form-group"><label class="form-label">条件</label>
+        <select class="form-select" name="matchMode">
+          <option value="any" ${s?.matchMode!=='all'?'selected':''}>いずれかのタグを含む</option>
+          <option value="all" ${s?.matchMode==='all'?'selected':''}>すべてのタグを含む（組み合わせ向き）</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">対象タグ（タップで選択）</label>
+        <div id="tagPick">${opts.length ? opts.map(t=>`<span class="tag-check ${sel.has(t)?'on':''}" data-t="${DS.esc(t)}">${DS.esc(t)}</span>`).join('') : '<span class="form-hint">タグがまだありません。画像にタグを付けると候補が出ます。</span>'}</div>
+        <input class="form-input mt-2" id="tagManual" placeholder="一覧に無いタグを手入力（カンマ区切り）">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">${s ? '保存' : '作成'}</button>
+    </form>`;
+  app.querySelectorAll('.tag-check').forEach(chip => chip.addEventListener('click', () => chip.classList.toggle('on')));
+  document.getElementById('sf').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const picked = [...app.querySelectorAll('.tag-check.on')].map(c => c.dataset.t);
+    const manual = parseTags(document.getElementById('tagManual').value);
+    const tagNames = [...new Set([...picked, ...manual])];
+    if (!tagNames.length) { DS.toast('対象タグを1つ以上選んでください', 'error'); return; }
+    const matchMode = fd.get('matchMode');
+    const rec = s || {};
+    rec.name = fd.get('name').trim();
+    rec.matchMode = matchMode;
+    rec.tagNames = tagNames;
+    // 既存の住人棚は種別を維持。新規/自由棚は all かつ2タグ以上なら組み合わせ棚に自動分類
+    if (rec.kind !== 'resident') rec.kind = (matchMode === 'all' && tagNames.length >= 2) ? 'coupling' : 'custom';
+    if (rec.sortOrder == null) rec.sortOrder = Date.now();
+    let sid;
+    if (s) { await DB.update(SHELVES, rec); sid = s.id; } else { sid = await DB.add(SHELVES, rec); }
+    DS.flash(s ? '保存しました' : '棚を作成しました');
+    location.hash = 'shelf/' + sid;
+  });
+}
+
+// ── 並び替え ──
+async function renderOrder() {
+  document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  let imgs = Store.bySort(await DB.all(STORE));
+  app.innerHTML = `
+    <h1 class="page-title">並び替え</h1>
+    <p class="page-subtitle">▲▼で順番を変えて保存</p>
+    <div class="order-list" id="ol" style="margin-top:0.8rem;"></div>
+    <button class="btn btn-primary btn-block mt-3" id="saveOrder">この順で保存</button>`;
+  const ol = document.getElementById('ol');
+  const draw = () => {
+    ol.innerHTML = '';
+    imgs.forEach((img, i) => {
+      const row = document.createElement('div');
+      row.className = 'order-item';
+      row.innerHTML = `<img src="${Store.imageURL(img)}" alt="">
+        <div class="oi-body">${DS.esc(img.description || img.originalName || ('画像 #' + img.id))}</div>
+        <button class="order-btn" data-up ${i===0?'disabled':''}>▲</button>
+        <button class="order-btn" data-down ${i===imgs.length-1?'disabled':''}>▼</button>`;
+      row.querySelector('[data-up]').addEventListener('click', () => { if (i>0) { [imgs[i-1],imgs[i]]=[imgs[i],imgs[i-1]]; draw(); } });
+      row.querySelector('[data-down]').addEventListener('click', () => { if (i<imgs.length-1) { [imgs[i+1],imgs[i]]=[imgs[i],imgs[i+1]]; draw(); } });
+      ol.appendChild(row);
+    });
+  };
+  draw();
+  document.getElementById('saveOrder').addEventListener('click', async () => {
+    for (let i = 0; i < imgs.length; i++) { imgs[i].sortOrder = i; await DB.update(STORE, imgs[i]); }
+    DS.flash('並び順を保存しました'); location.hash = '';
+  });
+}
+
+// ── アップロード ──
 async function renderUpload() {
   document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
+  let prefillPrompt = '';
+  try { prefillPrompt = sessionStorage.getItem('reveriePrefillPrompt') || ''; sessionStorage.removeItem('reveriePrefillPrompt'); } catch (e) {}
   app.innerHTML = `
     <h1 class="page-title">画像を追加</h1>
     <form id="f" class="mt-3">
       <div class="upload-drop" id="drop"><div class="upload-icon">🖼️</div><div style="margin-top:0.5rem;">タップして画像を選択</div><div id="fname" style="font-size:0.8rem;margin-top:0.4rem;color:var(--orchid);"></div></div>
       <input type="file" id="file" accept="image/*" style="display:none;">
       <div class="form-group mt-3"><label class="form-label">説明</label><input class="form-input" name="description" placeholder="この画像について"></div>
-      <div class="form-group"><label class="form-label">タグ</label><input class="form-input" name="tags" placeholder="例: 風景, キャラ"></div>
+      <div class="form-group"><label class="form-label">タグ</label><input class="form-input" id="tagInput" name="tags" placeholder="例: 風景, キャラ">
+        <div class="chip-row" id="tagChips"></div></div>
+      <div class="form-group"><label class="form-label">生成プロンプト（任意）</label><textarea class="form-textarea" name="prompt" style="min-height:80px;font-family:monospace;font-size:0.8rem;" placeholder="この画像を作ったプロンプト">${DS.esc(prefillPrompt)}</textarea></div>
       <button type="submit" class="btn btn-primary btn-block">アップロード</button>
     </form>`;
+  if (prefillPrompt) DS.toast('プロンプトを引き継ぎました');
+  mountChips('tagChips', document.getElementById('tagInput'), await suggestionTags());
   const fileInput = document.getElementById('file');
   document.getElementById('drop').addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => { document.getElementById('fname').textContent = fileInput.files[0]?.name || ''; });
@@ -97,11 +277,13 @@ async function renderUpload() {
     await DB.add(STORE, {
       blob: file, originalName: file.name,
       description: fd.get('description').trim(), tags: parseTags(fd.get('tags')),
+      prompt: fd.get('prompt').trim(),
     });
     DS.flash('アップロードしました'); location.hash = '';
   });
 }
 
+// ── ライトボックス ──
 async function openLightbox(id) {
   const img = await DB.get(STORE, id);
   if (!img) return;
@@ -112,17 +294,23 @@ async function openLightbox(id) {
     <div class="flex-between"><strong>画像 #${img.id}</strong><button class="btn btn-sm" id="lbClose">閉じる</button></div>
     <p style="font-size:0.7rem;color:var(--orchid);margin-top:0.5rem;">挿入コード: <code>{{img:${img.id}}}</code></p>
     <div class="form-group mt-2"><label class="form-label">説明</label><input class="form-input" id="lbDesc" value="${DS.esc(img.description||'')}"></div>
-    <div class="form-group"><label class="form-label">タグ</label><input class="form-input" id="lbTags" value="${DS.esc((img.tags||[]).join(', '))}"></div>
+    <div class="form-group"><label class="form-label">タグ</label><input class="form-input" id="lbTags" value="${DS.esc((img.tags||[]).join(', '))}">
+      <div class="chip-row" id="lbChips"></div></div>
+    <div class="form-group"><div class="flex-between"><label class="form-label">生成プロンプト</label>${img.prompt?`<button class="btn btn-sm" id="lbCopyP" type="button">📋</button>`:''}</div>
+      <textarea class="form-textarea" id="lbPrompt" style="min-height:70px;font-family:monospace;font-size:0.78rem;" placeholder="（未登録）">${DS.esc(img.prompt||'')}</textarea></div>
     ${usedIn.length ? `<p class="form-hint">この画像が使われている物語: ${usedIn.map(n=>`<a href="desire.html#view/${n.id}" style="color:var(--orchid);">${DS.esc(n.title||'無題')}</a>`).join('、 ')}</p>` : ''}
     <div class="prov-row" style="display:flex;gap:0.5rem;margin-top:0.7rem;">
       <button class="btn btn-sm" id="lbSave" style="flex:1;">保存</button>
       <button class="btn btn-danger btn-sm" id="lbDel">削除</button>
     </div>`;
   document.getElementById('lightbox').classList.add('show');
+  mountChips('lbChips', document.getElementById('lbTags'), await suggestionTags());
   document.getElementById('lbClose').onclick = closeLightbox;
+  document.getElementById('lbCopyP')?.addEventListener('click', () => { navigator.clipboard?.writeText(img.prompt||''); DS.toast('コピーしました'); });
   document.getElementById('lbSave').onclick = async () => {
     img.description = document.getElementById('lbDesc').value.trim();
     img.tags = parseTags(document.getElementById('lbTags').value);
+    img.prompt = document.getElementById('lbPrompt').value.trim();
     await DB.update(STORE, img); DS.toast('保存しました'); closeLightbox(); route();
   };
   document.getElementById('lbDel').onclick = async () => {
