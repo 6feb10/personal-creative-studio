@@ -79,7 +79,7 @@ async function renderView(id) {
     ${sect('AIへのカスタム指示', p.customInstructions ? `<div class="card"><div class="card-excerpt">${DS.esc(p.customInstructions).replace(/\n/g,'<br>')}</div></div>` : '')}
     ${sect('ナレッジ', p.knowledge ? `<div class="card"><div class="card-excerpt">${DS.esc(p.knowledge).replace(/\n/g,'<br>')}</div></div>` : '')}
     ${sect('リンク', (p.links||[]).length ? `<div class="card-tags">${p.links.map(l=>`<a class="tag" href="${DS.esc(l.url)}" target="_blank" rel="noopener">🔗 ${DS.esc(l.label||l.url)}</a>`).join('')}</div>` : '')}
-    ${sect('ペルソナ', (p.personas||[]).length ? p.personas.map(pe=>`<div class="card"><div class="card-title">${DS.esc(pe.name)}</div><div class="card-excerpt">${DS.esc(pe.description||'')}</div></div>`).join('') : '')}
+    ${sect('語り手・視点', (p.personas||[]).length ? p.personas.map(pe=>`<div class="card"><div class="card-title">🎭 ${DS.esc(pe.name)}</div><div class="card-excerpt">${DS.esc(pe.description||'')}</div></div>`).join('') : '')}
     ${sect('紐づくキャラ・拠点', (baseNames.length||resNames.length) ? `<div class="card-tags">${baseNames.map(n=>`<span class="tag">🏠 ${DS.esc(n)}</span>`).join('')}${resNames.map(n=>`<span class="tag">👤 ${DS.esc(n)}</span>`).join('')}</div>` : '')}
     ${sect('このプロットの物語', linkedNovels.length ? linkedNovels.map(n=>`<div class="card"><a href="desire.html#view/${n.id}"><div class="card-title">${DS.esc(n.title||'無題')}</div></a></div>`).join('') : '')}`;
 }
@@ -100,7 +100,7 @@ async function renderEdit(id) {
       <div class="form-group"><label class="form-label">AIへのカスタム指示</label><div class="form-hint" style="margin-top:0;margin-bottom:0.5rem;">🤖 生成時に毎回AIへ送信。「敬体で」「〇〇風で」など、AIへの“こうして”という命令・ルール。</div><textarea class="form-textarea" name="customInstructions" style="min-height:100px;" placeholder="生成時に毎回先頭へ付与されます">${DS.esc(p?.customInstructions||'')}</textarea></div>
       <div class="form-group"><label class="form-label">ナレッジ</label><div class="form-hint" style="margin-top:0;margin-bottom:0.5rem;">🤖 生成時に毎回AIへ送信。世界観・用語・設定など、AIに“知っておいてほしい”参考情報。</div><textarea class="form-textarea" name="knowledge" style="min-height:100px;">${DS.esc(p?.knowledge||'')}</textarea></div>
       <div class="form-group"><label class="form-label">リンク</label><div class="form-hint" style="margin-top:0;margin-bottom:0.5rem;">🔗 参考ページのブックマーク（クリックで別タブで開く）。AIには送られません。</div><div id="links"></div><button type="button" class="btn btn-sm" id="addLink">＋ リンク追加</button></div>
-      <div class="form-group"><label class="form-label">ペルソナ</label><div class="form-hint" style="margin-top:0;margin-bottom:0.5rem;">🎭 名前＋説明のメモ（現状は記録・表示のみ）。住人とは別の“話し相手／語り手”用の枠です。</div><div id="personas"></div><button type="button" class="btn btn-sm" id="addPersona">＋ ペルソナ追加</button></div>
+      <div class="form-group"><label class="form-label">語り手・視点</label><div class="form-hint" style="margin-top:0;margin-bottom:0.5rem;">🎭 生成画面で選ぶと、その視点・語り口で文章が書かれます（住人とは別枠）。例:「主人公の一人称」「神視点の語り部」。</div><div id="personas"></div><button type="button" class="btn btn-sm" id="addPersona">＋ 語り手を追加</button></div>
       ${bases.length ? `<div class="form-group"><label class="form-label">紐づく拠点</label><div class="chk-list" id="baseChks">
         ${bases.map(b=>`<label class="chk ${selBases.has(b.id)?'on':''}"><input type="checkbox" value="${b.id}" ${selBases.has(b.id)?'checked':''}>🏠 ${DS.esc(b.name)}</label>`).join('')}</div></div>` : ''}
       ${residents.length ? `<div class="form-group"><label class="form-label">紐づくキャラ</label><div class="chk-list" id="resChks">
@@ -129,7 +129,7 @@ async function renderEdit(id) {
   // repeatable personas
   const persWrap = document.getElementById('personas');
   const addPersona = (pe={}) => { const d=document.createElement('div'); d.className='rep-row';
-    d.innerHTML=`<input class="form-input ps-name" placeholder="名前" value="${DS.esc(pe.name||'')}" style="flex:1;"><input class="form-input ps-desc" placeholder="説明" value="${DS.esc(pe.description||'')}" style="flex:2;"><button type="button" class="btn btn-sm" data-rm>×</button>`;
+    d.innerHTML=`<input class="form-input ps-name" placeholder="例: 主人公の一人称" value="${DS.esc(pe.name||'')}" style="flex:1;"><input class="form-input ps-desc" placeholder="語り口・視点の説明" value="${DS.esc(pe.description||'')}" style="flex:2;"><button type="button" class="btn btn-sm" data-rm>×</button>`;
     d.querySelector('[data-rm]').onclick=()=>d.remove(); persWrap.appendChild(d); };
   (p?.personas||[]).forEach(addPersona);
   document.getElementById('addPersona').onclick = () => addPersona();

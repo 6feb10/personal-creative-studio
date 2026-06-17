@@ -76,6 +76,7 @@ async function renderGenerate() {
       <div class="form-group"><label class="form-label">AIモデル</label><select class="form-select" id="provider">
         ${modelOpts.map(o=>`<option value="${o.providerId}:${o.idx}">${DS.esc(o.label)}</option>`).join('')}</select></div>
       ${projects.length?`<div class="form-group"><label class="form-label">プロット</label><select class="form-select" id="project"><option value="">— なし —</option>${projects.map(p=>`<option value="${p.id}">${DS.esc(p.name)}</option>`).join('')}</select></div>`:''}
+      <div id="narratorWrap"></div>
       ${bases.length?`<div class="mat-heading">拠点</div><div class="chk-list" id="bases">${bases.map(b=>`<label class="chk"><input type="checkbox" value="${b.id}">${DS.esc(b.name)}</label>`).join('')}</div>`:''}
       ${residents.length?`<div class="mat-heading">キャラクター</div><div class="chk-list" id="residents">${residents.map(r=>`<label class="chk"><input type="checkbox" value="${r.id}">${DS.esc(r.name)}</label>`).join('')}</div>`:''}
       ${templates.length?`<div class="mat-heading">テンプレート</div><div class="chk-list" id="templates">${templates.map(t=>`<label class="chk"><input type="checkbox" value="${t.id}">${DS.esc(t.name)}</label>`).join('')}</div>`:''}
@@ -83,48 +84,100 @@ async function renderGenerate() {
       <div class="form-group"><label class="form-label">指示・お題</label><textarea class="form-textarea" id="prompt" style="min-height:100px;" placeholder="例: 二人が初めて出会う場面を書いて"></textarea></div>
       <button type="submit" class="btn btn-primary btn-block" id="genBtn">✨ 生成する</button>
     </form>
+    <div id="tokPanel" class="card" style="margin-top:1rem;"></div>
     <div id="out"></div>`;
+  const data = { projects, bases, residents, templates, novels };
   app.querySelectorAll('.chk input').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.chk').classList.toggle('on',cb.checked)));
+
+  const gatherSel = () => ({
+    projectId: Number(document.getElementById('project')?.value) || null,
+    baseIds: [...app.querySelectorAll('#bases input:checked')].map(c=>Number(c.value)),
+    residentIds: [...app.querySelectorAll('#residents input:checked')].map(c=>Number(c.value)),
+    templateIds: [...app.querySelectorAll('#templates input:checked')].map(c=>Number(c.value)),
+    narratorIdx: document.getElementById('narrator')?.value ?? '',
+    contNovelId: Number(document.getElementById('contNovel')?.value) || null,
+  });
+  const updateNarrator = () => {
+    const wrap = document.getElementById('narratorWrap');
+    const p = data.projects.find(x=>x.id===(Number(document.getElementById('project')?.value)||null));
+    const pers = p?.personas || [];
+    wrap.innerHTML = pers.length ? `<div class="form-group"><label class="form-label">語り手・視点</label><div class="form-hint" style="margin-top:0;margin-bottom:0.5rem;">🎭 選んだプロットの語り手で、文体・視点を切り替えます。</div><select class="form-select" id="narrator"><option value="">— 標準 —</option>${pers.map((pe,i)=>`<option value="${i}">${DS.esc(pe.name)}</option>`).join('')}</select></div>` : '';
+  };
+  const renderTokPanel = () => {
+    const segs = collectSegments(gatherSel(), data);
+    const userText = document.getElementById('prompt')?.value.trim() || '';
+    const rows = segs.map(s=>({ label:s.label, tok:estTokens(s.text) }));
+    if (userText) rows.push({ label:'指示・お題', tok:estTokens(userText) });
+    const total = rows.reduce((a,r)=>a+r.tok,0);
+    document.getElementById('tokPanel').innerHTML = `
+      <div class="flex-between" style="margin-bottom:0.4rem;"><strong style="font-size:0.85rem;color:var(--orchid);">🧮 入力トークン内訳（概算）</strong><span style="font-weight:700;color:var(--honey);">${total.toLocaleString()} tok</span></div>
+      ${rows.map(r=>`<div class="flex-between" style="font-size:0.8rem;padding:0.25rem 0;border-top:1px solid rgba(124,92,255,0.08);"><span>${DS.esc(r.label)}</span><span style="color:var(--honey);">${r.tok.toLocaleString()}</span></div>`).join('')}
+      <div class="card-meta" style="margin-top:0.5rem;">※概算です。実際の課金トークンは生成後に表示されます。</div>`;
+  };
+
+  document.getElementById('project')?.addEventListener('change', () => { updateNarrator(); renderTokPanel(); });
+  document.getElementById('f').addEventListener('input', renderTokPanel);
+  document.getElementById('f').addEventListener('change', renderTokPanel);
+  updateNarrator(); renderTokPanel();
+
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('genBtn'); btn.disabled = true; btn.textContent = '生成中… ✨';
     const [providerId, modelIdx] = document.getElementById('provider').value.split(':').map(Number);
-    const projectId = Number(document.getElementById('project')?.value) || null;
-    const baseIds = [...app.querySelectorAll('#bases input:checked')].map(c=>Number(c.value));
-    const residentIds = [...app.querySelectorAll('#residents input:checked')].map(c=>Number(c.value));
-    const templateIds = [...app.querySelectorAll('#templates input:checked')].map(c=>Number(c.value));
-    const contNovelId = Number(document.getElementById('contNovel')?.value) || null;
-    let prevContent = '', contMode = '';
-    if (contNovelId) { const n = await DB.get('novels', contNovelId); prevContent = Store.stripMarkers(n?.body||''); contMode = 'full'; }
-    const sys = await buildSystem({ projectId, baseIds, residentIds, templateIds, prevContent, contMode });
-    const user = document.getElementById('prompt').value.trim() || (prevContent ? 'この続きを書いてください。' : '上記の設定に基づいて、印象的なシーンを書いてください。');
+    const sel = gatherSel();
+    const segs = collectSegments(sel, data);
+    const sys = segs.map(s=>s.text).join('\n\n');
+    const hasPrev = sel.contNovelId && data.novels.find(n=>n.id===sel.contNovelId);
+    const user = document.getElementById('prompt').value.trim() || (hasPrev ? 'この続きを書いてください。' : '上記の設定に基づいて、印象的なシーンを書いてください。');
     const provider = modelOpts.find(o=>o.providerId===providerId)?.provider;
     const res = await AI.call(provider, sys, user, modelIdx);
     btn.disabled = false; btn.textContent = '✨ 生成する';
     if (res.error) { DS.toast(res.error, 'error'); return; }
-    const genId = await DB.add('forgeGenerations', { provider: res.provider, model: res.model, promptSystem: sys, promptUser: user, output: res.text, inputTokens: res.inputTokens, outputTokens: res.outputTokens, cachedTokens: res.cachedTokens, costInput: res.costInput, costOutput: res.costOutput, costTotal: res.costTotal, savedToNovelId: contNovelId || null });
+    const genId = await DB.add('forgeGenerations', { provider: res.provider, model: res.model, promptSystem: sys, promptUser: user, output: res.text, inputTokens: res.inputTokens, outputTokens: res.outputTokens, cachedTokens: res.cachedTokens, costInput: res.costInput, costOutput: res.costOutput, costTotal: res.costTotal, savedToNovelId: sel.contNovelId || null });
     location.hash = 'result/' + genId;
   });
 }
 
-async function buildSystem({ projectId, baseIds, residentIds, templateIds, prevContent, contMode }) {
-  const parts = ['あなたは優れた小説家です。日本語で、指示された設定・条件に基づいて創作してください。\n'];
-  if (projectId) { const p = await DB.get('projects', projectId); if (p) { parts.push(`## プロット: ${p.name}`); if (p.customInstructions) parts.push(`### カスタム指示\n${p.customInstructions}`); if (p.knowledge) parts.push(`### ナレッジ\n${p.knowledge}`); } }
-  const allRes = await DB.all('residents');
-  for (const bid of baseIds) { const b = await DB.get('bases', bid); if (b) { parts.push(`## 拠点: ${b.name}\n${b.description||''}`); const m = allRes.filter(r=>r.baseId===bid).map(r=>r.name); if (m.length) parts.push('所属キャラ: ' + m.join('、')); } }
-  for (const rid of residentIds) {
-    const r = await DB.get('residents', rid); if (!r) continue;
-    let info = `## キャラ: ${r.name}\n`;
-    const map = { gender:'性別', height:'身長', bodyType:'体型', hairstyle:'髪型', eyeColor:'目の色', clothing:'服装', style:'系統', features:'特徴', personality:'性格', physicalInfo:'身体情報' };
-    for (const k in map) if (r[k]) info += `${map[k]}: ${r[k]}\n`;
-    if (r.baseId) { const bn = (await DB.get('bases', r.baseId))?.name; if (bn) info += `所属: ${bn}\n`; }
-    if ((r.params||[]).length) info += 'パラメーター: ' + r.params.map(p=>`${p.name}: ${p.value}/10`).join('、') + '\n';
-    for (const cf of (r.customFields||[])) if (cf.name && cf.value) info += `${cf.name}: ${cf.value}\n`;
-    parts.push(info);
+// 日本語混在テキストのトークン概算（CJK≒1tok/字、その他≒1tok/4字）
+function estTokens(s) {
+  if (!s) return 0;
+  let cjk = 0, other = 0;
+  for (const ch of s) { if (/[　-ヿ㐀-鿿豈-﫿＀-￯]/.test(ch)) cjk++; else other++; }
+  return Math.ceil(cjk * 0.95 + other * 0.25);
+}
+
+// システムプロンプトを「項目」単位のセグメントに組み立てる（生成・トークン内訳の両方で使用）
+function collectSegments(sel, data) {
+  const segs = [{ label:'基本指示', text:'あなたは優れた小説家です。日本語で、指示された設定・条件に基づいて創作してください。\n' }];
+  const p = sel.projectId ? data.projects.find(x=>x.id===sel.projectId) : null;
+  if (p) {
+    let t = `## プロット: ${p.name}`;
+    if (p.customInstructions) t += `\n\n### カスタム指示\n${p.customInstructions}`;
+    if (p.knowledge) t += `\n\n### ナレッジ\n${p.knowledge}`;
+    segs.push({ label:`プロット「${p.name}」`, text:t });
+    const nar = (sel.narratorIdx !== '' && sel.narratorIdx != null) ? (p.personas||[])[Number(sel.narratorIdx)] : null;
+    if (nar) segs.push({ label:`語り手「${nar.name}」`, text:`## 語り手・視点\n「${nar.name}」の視点・語り口で書いてください。${nar.description?`（${nar.description}）`:''}` });
   }
-  for (const tid of templateIds) { const t = await DB.get('forgeTemplates', tid); if (t) parts.push(`## 指示: ${t.name}\n${t.content}`); }
-  if (prevContent) parts.push(contMode === 'summary' ? `## これまでのあらすじ\n以下は要約です。続きを書いてください。\n\n${prevContent}` : `## ここまでの本文\n以下の直後の続きを自然に書いてください。\n\n${prevContent}`);
-  return parts.join('\n\n');
+  for (const bid of sel.baseIds) {
+    const b = data.bases.find(x=>x.id===bid); if (!b) continue;
+    let t = `## 拠点: ${b.name}\n${b.description||''}`;
+    const m = data.residents.filter(r=>r.baseId===bid).map(r=>r.name);
+    if (m.length) t += '\n所属キャラ: ' + m.join('、');
+    segs.push({ label:`拠点「${b.name}」`, text:t });
+  }
+  const map = { gender:'性別', height:'身長', bodyType:'体型', hairstyle:'髪型', eyeColor:'目の色', clothing:'服装', style:'系統', features:'特徴', personality:'性格', physicalInfo:'身体情報' };
+  for (const rid of sel.residentIds) {
+    const r = data.residents.find(x=>x.id===rid); if (!r) continue;
+    let info = `## キャラ: ${r.name}\n`;
+    for (const k in map) if (r[k]) info += `${map[k]}: ${r[k]}\n`;
+    if (r.baseId) { const bn = data.bases.find(x=>x.id===r.baseId)?.name; if (bn) info += `所属: ${bn}\n`; }
+    if ((r.params||[]).length) info += 'パラメーター: ' + r.params.map(pp=>`${pp.name}: ${pp.value}/10`).join('、') + '\n';
+    for (const cf of (r.customFields||[])) if (cf.name && cf.value) info += `${cf.name}: ${cf.value}\n`;
+    segs.push({ label:`キャラ「${r.name}」`, text:info });
+  }
+  for (const tid of sel.templateIds) { const t = data.templates.find(x=>x.id===tid); if (t) segs.push({ label:`テンプレ「${t.name}」`, text:`## 指示: ${t.name}\n${t.content}` }); }
+  if (sel.contNovelId) { const n = data.novels.find(x=>x.id===sel.contNovelId); if (n) { const pc = Store.stripMarkers(n.body||''); if (pc) segs.push({ label:`続き「${n.title||'無題'}」`, text:`## ここまでの本文\n以下の直後の続きを自然に書いてください。\n\n${pc}` }); } }
+  return segs;
 }
 
 async function renderResult(id) {
