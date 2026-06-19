@@ -244,8 +244,33 @@ async function renderUsage() {
   document.getElementById('header').innerHTML = DS.pageHeader('#', '戻る', ICON);
   const gens = await DB.all('forgeGenerations');
   const sum = (k) => gens.reduce((a, g) => a + (Number(g[k])||0), 0);
-  const byProv = {};
-  for (const g of gens) { const p = g.provider||'?'; (byProv[p] ??= { n:0, cost:0 }); byProv[p].n++; byProv[p].cost += Number(g.costTotal)||0; }
+
+  const groupBy = (keyFn) => {
+    const m = new Map();
+    for (const g of gens) {
+      const key = keyFn(g);
+      const r = m.get(key) || { n:0, inp:0, out:0, cost:0 };
+      r.n++; r.inp += Number(g.inputTokens)||0; r.out += Number(g.outputTokens)||0; r.cost += Number(g.costTotal)||0;
+      m.set(key, r);
+    }
+    return [...m.entries()].map(([key,v])=>({ key, ...v }));
+  };
+  const pad = (n)=>String(n).padStart(2,'0');
+  const dayKey   = (g)=>{ const d=new Date(g.createdAt||0); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+  const monthKey = (g)=>{ const d=new Date(g.createdAt||0); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; };
+  const weekKey  = (g)=>{ const d=new Date(g.createdAt||0); const off=(d.getDay()+6)%7; const mon=new Date(d); mon.setDate(d.getDate()-off); return `${mon.getFullYear()}-${pad(mon.getMonth()+1)}-${pad(mon.getDate())}`; };
+  const periods = {
+    day:   { label:'日別', fn:dayKey,   limit:31, suffix:'' },
+    week:  { label:'週別', fn:weekKey,  limit:26, suffix:' の週' },
+    month: { label:'月別', fn:monthKey, limit:24, suffix:'' },
+  };
+  const rowsHtml = (arr, suffix='') => arr.length ? arr.map(r=>`
+    <div style="padding:0.5rem 0;border-top:1px solid rgba(124,92,255,0.08);">
+      <div class="flex-between"><strong>${DS.esc(r.key)}${suffix}</strong><span style="color:var(--honey);font-weight:700;">$${r.cost.toFixed(4)}</span></div>
+      <div class="card-meta">${r.n}回 · 入力 ${r.inp.toLocaleString()} · 出力 ${r.out.toLocaleString()}</div>
+    </div>`).join('') : '<div class="card-meta" style="padding:0.4rem 0;">データなし</div>';
+  const byModelArr = groupBy(g=>g.model||'?').sort((a,b)=>b.cost-a.cost || b.n-a.n);
+
   app.innerHTML = `
     <h1 class="page-title">使用量</h1><p class="page-subtitle">AI利用状況</p>
     <div class="gen-stats">
@@ -254,8 +279,25 @@ async function renderUsage() {
       <div class="gen-stat"><div class="gen-stat-val">${sum('inputTokens').toLocaleString()}</div><div class="gen-stat-label">入力トークン</div></div>
       <div class="gen-stat"><div class="gen-stat-val">${sum('outputTokens').toLocaleString()}</div><div class="gen-stat-label">出力トークン</div></div>
     </div>
-    <div class="mat-heading">プロバイダー別</div>
-    ${Object.keys(byProv).length ? Object.entries(byProv).map(([p,v])=>`<div class="card"><div class="flex-between"><strong>${DS.esc(p)}</strong><span>${v.n}回 · $${v.cost.toFixed(4)}</span></div></div>`).join('') : '<p class="empty-text" style="text-align:left;">まだ生成履歴がありません。</p>'}`;
+    ${gens.length ? `
+    <div class="mat-heading">期間別</div>
+    <div class="chk-list" id="periodTabs">${Object.entries(periods).map(([k,p],i)=>`<span class="chk ${i===0?'on':''}" data-period="${k}">${p.label}</span>`).join('')}</div>
+    <div class="card" id="periodTable" style="margin-top:0.6rem;"></div>
+    <div class="mat-heading">モデル別</div>
+    <div class="card">${rowsHtml(byModelArr)}</div>`
+    : '<p class="empty-text" style="text-align:left;">まだ生成履歴がありません。</p>'}`;
+
+  if (!gens.length) return;
+  const drawPeriod = (key) => {
+    const p = periods[key];
+    const arr = groupBy(p.fn).sort((a,b)=>a.key<b.key?1:-1).slice(0, p.limit);
+    document.getElementById('periodTable').innerHTML = rowsHtml(arr, p.suffix);
+  };
+  drawPeriod('day');
+  document.querySelectorAll('#periodTabs .chk').forEach(t=>t.addEventListener('click', ()=>{
+    document.querySelectorAll('#periodTabs .chk').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on'); drawPeriod(t.dataset.period);
+  }));
 }
 
 window.addEventListener('hashchange', route);
