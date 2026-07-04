@@ -57,9 +57,10 @@ async function renderList() {
   for (const b of filtered) {
     const card = document.createElement('div');
     card.className = 'card';
+    const safeUrl = DS.normalizeHttpUrl(b.url);
     card.innerHTML = `
       <div class="flex-between"><div class="card-title">${DS.esc(b.title || b.url)}</div></div>
-      ${b.url ? `<div class="card-meta"><a href="${DS.esc(b.url)}" target="_blank" rel="noopener" style="color:var(--orchid);text-decoration:none;">🔗 ${DS.esc(b.url)}</a></div>` : ''}
+      ${safeUrl ? `<div class="card-meta"><a href="${DS.esc(safeUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--orchid);text-decoration:none;">🔗 ${DS.esc(b.url)}</a></div>` : b.url ? `<div class="card-meta">⚠ 無効なURL: ${DS.esc(b.url)}</div>` : ''}
       ${b.description ? `<div class="card-excerpt">${DS.esc(b.description)}</div>` : ''}
       ${(b.tags||[]).length ? `<div class="card-tags">${b.tags.map(t=>`<span class="tag">${DS.esc(t)}</span>`).join('')}</div>` : ''}
       <div class="flex-between" style="margin-top:0.7rem;"><a class="btn btn-sm" href="#edit/${b.id}">編集</a></div>`;
@@ -84,7 +85,10 @@ async function renderEdit(id) {
     e.preventDefault();
     const fd = new FormData(e.target);
     const rec = b || {};
-    rec.url = fd.get('url').trim();
+    const normalizedUrl = DS.normalizeHttpUrl(fd.get('url'));
+    if (!normalizedUrl) { DS.toast('URLは http:// または https:// のみ保存できます', 'error'); return; }
+
+    rec.url = normalizedUrl;
     rec.title = fd.get('title').trim();
     rec.description = fd.get('description').trim();
     rec.tags = parseTags(fd.get('tags'));

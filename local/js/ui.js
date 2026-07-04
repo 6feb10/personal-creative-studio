@@ -84,6 +84,20 @@ function fmtDate(ts) {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
 }
 
+// http(s) URLだけを保存・リンク化するための正規化
+// - example.com のようにスキームが無い場合は https:// を補う
+// - javascript: など http(s) 以外のスキームは空文字を返す
+function normalizeHttpUrl(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  const hasScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(s);
+  const candidate = hasScheme ? s : 'https://' + s;
+  try {
+    const u = new URL(candidate);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+  } catch { return ''; }
+}
+
 // ── アプリ初期化（各ページの先頭で呼ぶ） ──
 async function appInit() {
   if ('serviceWorker' in navigator) {
@@ -99,4 +113,4 @@ async function appInit() {
   showPendingFlash();
 }
 
-window.DS = { esc, excerpt, qs, qsa, flash, toast, confirmDialog, pageHeader, fmtDate, appInit };
+window.DS = { esc, excerpt, qs, qsa, flash, toast, confirmDialog, pageHeader, fmtDate, normalizeHttpUrl, appInit };
