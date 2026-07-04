@@ -78,7 +78,7 @@ async function renderView(id) {
     ${sect('説明', p.description ? `<p class="card-excerpt">${DS.esc(p.description).replace(/\n/g,'<br>')}</p>` : '')}
     ${sect('AIへのカスタム指示', p.customInstructions ? `<div class="card"><div class="card-excerpt">${DS.esc(p.customInstructions).replace(/\n/g,'<br>')}</div></div>` : '')}
     ${sect('ナレッジ', p.knowledge ? `<div class="card"><div class="card-excerpt">${DS.esc(p.knowledge).replace(/\n/g,'<br>')}</div></div>` : '')}
-    ${sect('リンク', (p.links||[]).length ? `<div class="card-tags">${p.links.map(l=>`<a class="tag" href="${DS.esc(l.url)}" target="_blank" rel="noopener">🔗 ${DS.esc(l.label||l.url)}</a>`).join('')}</div>` : '')}
+    ${sect('リンク', (p.links||[]).length ? `<div class="card-tags">${p.links.map(l=>{ const safeUrl = DS.normalizeHttpUrl(l.url); return safeUrl ? `<a class="tag" href="${DS.esc(safeUrl)}" target="_blank" rel="noopener noreferrer">🔗 ${DS.esc(l.label||l.url)}</a>` : `<span class="tag">⚠ ${DS.esc(l.label||l.url)}</span>`; }).join('')}</div>` : '')}
     ${sect('語り手・視点', (p.personas||[]).length ? p.personas.map(pe=>`<div class="card"><div class="card-title">🎭 ${DS.esc(pe.name)}</div><div class="card-excerpt">${DS.esc(pe.description||'')}</div></div>`).join('') : '')}
     ${sect('紐づくキャラ・拠点', (baseNames.length||resNames.length) ? `<div class="card-tags">${baseNames.map(n=>`<span class="tag">🏠 ${DS.esc(n)}</span>`).join('')}${resNames.map(n=>`<span class="tag">👤 ${DS.esc(n)}</span>`).join('')}</div>` : '')}
     ${sect('このプロットの物語', linkedNovels.length ? linkedNovels.map(n=>`<div class="card"><a href="desire.html#view/${n.id}"><div class="card-title">${DS.esc(n.title||'無題')}</div></a></div>`).join('') : '')}`;
@@ -143,7 +143,13 @@ async function renderEdit(id) {
     rec.description = fd.get('description').trim();
     rec.customInstructions = fd.get('customInstructions').trim();
     rec.knowledge = fd.get('knowledge').trim();
-    rec.links = [...linksWrap.querySelectorAll('.rep-row')].map(r=>({label:r.querySelector('.lk-label').value.trim(), url:r.querySelector('.lk-url').value.trim()})).filter(l=>l.url);
+    const links = [...linksWrap.querySelectorAll('.rep-row')].map(r=>({label:r.querySelector('.lk-label').value.trim(), url:r.querySelector('.lk-url').value.trim()})).filter(l=>l.url);
+    for (const l of links) {
+      const normalizedUrl = DS.normalizeHttpUrl(l.url);
+      if (!normalizedUrl) { DS.toast('リンクURLは http:// または https:// のみ保存できます', 'error'); return; }
+      l.url = normalizedUrl;
+    }
+    rec.links = links;
     rec.personas = [...persWrap.querySelectorAll('.rep-row')].map(r=>({name:r.querySelector('.ps-name').value.trim(), description:r.querySelector('.ps-desc').value.trim()})).filter(x=>x.name);
     rec.baseIds = [...app.querySelectorAll('#baseChks input:checked')].map(c=>Number(c.value));
     rec.residentIds = [...app.querySelectorAll('#resChks input:checked')].map(c=>Number(c.value));
